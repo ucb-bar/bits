@@ -26,28 +26,10 @@ run_timestamp = time.time()
 
 version = '0.1'
 
-outdir = '/nscratch/' + getpass.getuser() + '/cassandra'
 workdir = os.getcwd() + '/work'
-rundir = workdir + '/cassandra-' +  datetime.datetime.fromtimestamp(run_timestamp). \
-	strftime('%Y-%m-%d-%H-%M-%S')
+srcdir = workdir + '/src'
 
-network_if = 'eth0'
-
-cassandra_version = '1.2.19'
-
-
-cassandra_url = 'http://mirror.reverse.net/pub/apache/cassandra/${VERSION}/' + \
-	'apache-cassandra-${VERSION}-bin.tar.gz'
-
-cassandra_filename = 'cassandra-' + cassandra_version + '.tar.gz'
-
-cassandra_home = outdir + '/apache-cassandra-' + cassandra_version
-
-local_dir = '/data/cassandra/' + getpass.getuser()
-saved_caches_dir = local_dir + '/saved_caches'
-commitlog_dir = local_dir + '/log'
-data_dir = local_dir + '/data'
-logfile = local_dir + '/system.log'
+git_url = 'git@github.com:brianfrankcooper/YCSB.git'
 
 # -------------------------------------------------------------------------------------------------
 
@@ -55,43 +37,22 @@ def make_dir(mydir):
 	if not os.path.exists(mydir):
     		os.makedirs(mydir)
 
-# Return list of the Ip addresses for the chosen network_if on all nodes in nodelist
-def get_ip_addresses(nodelist):
-	results = subprocess.check_output( \
-		['srun', '--nodelist=' + ','.join(nodelist), 'bash', 'get_ip_address.sh'], \
-		universal_newlines=True)
-	json_str = '[' + ','.join(results.splitlines()) + ']'
-	raw_data = json.loads(json_str)
-	ip_map = {}
-	for entry in raw_data:
-		ip_map[entry['host']] = entry['ip']
-	return ip_map
-
 # -------------------------------------------------------------------------------------------------
 
 def do_setup():
-	print '> Setting up Cassandra in directory ' + outdir
-	print '> Working directory: ' + workdir
+	print '> Setting up YCSB with source directory ' + srcdir
 	print '>'
 
-	download_path = workdir + '/downloads/' + cassandra_filename 
-	if not os.path.exists(download_path):
-		print '> Downloading Cassandra ' + cassandra_version
-		download_url = cassandra_url.replace('${VERSION}', cassandra_version)
-		print '> URL: ' + download_url
-		make_dir(workdir + '/downloads')
-		print '> TARGET FILE: ' + download_path
-		print '> Downloading...'
-		urllib.urlretrieve(download_url, download_path)
-		print '> DONE'
+	if not os.path.exists(srcdir):
+		print '> Use existing source directory'
 	else:
-		print '> Use previously downloaded Cassandra package at ' + cassandra_filename
-	print '>'
-
-	print '> Creating Cassandra directory'
-	make_dir(outdir)		
-	p = subprocess.Popen(['tar', 'xfz', download_path], cwd=outdir, stdin=subprocess.PIPE)
-	p.wait()
+		print '> Cloning YCSB git repository (' + git_url + ')...'
+		print '> Note: Enter SSH credentials as necessary'
+		with open(workdir + '/git.log', 'w') as fout:
+			p = subprocess.Popen(['git', 'clone', git_url], cwd=srcdir, \
+				stdin=subprocess.PIPE, stdout=fout)
+			p.wait()
+			print '> GIT CLONE FINISHED'
 	print '> DONE'
 	print '>'
 
