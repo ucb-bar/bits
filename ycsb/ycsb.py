@@ -1,4 +1,6 @@
-# Usage of cassandra.py script:
+#!/usr/bin/env python
+
+# Usage of ycsb.py script:
 # Need to run within a salloc allocation.
 # Supported frameworks:
 # - Cassandra (use cassandra run script)
@@ -31,13 +33,26 @@ modules = ['cassandra', 'core', 'distribution']
 workdir = os.getcwd() + '/work'
 srcdir = workdir + '/src'
 
+rundir = workdir + '/ycsb-' +  datetime.datetime.fromtimestamp(run_timestamp). \
+        strftime('%Y-%m-%d-%H-%M-%S')
+
 git_url = 'git@github.com:brianfrankcooper/YCSB.git'
+
+print_vars = ['git_url']
 
 # -------------------------------------------------------------------------------------------------
 
 def make_dir(mydir):
 	if not os.path.exists(mydir):
     		os.makedirs(mydir)
+
+# Return the list of nodes in the current SLURM allocation
+def get_slurm_nodelist():
+        nodelist = subprocess.check_output( \
+                ['scontrol', 'show', 'hostname', os.environ['SLURM_NODELIST']], \
+                universal_newlines=True)
+        nodelist = nodelist.strip().split('\n')
+        return nodelist
 
 # -------------------------------------------------------------------------------------------------
 
@@ -82,7 +97,7 @@ def do_setup():
 		fpom.write(''.join(new_pom))
 
 	with open(workdir + '/compile.log', 'w') as fout:
-		p = subprocess.Popen(['srun', '-N', '1', 'mvn', 'clean', 'package'], cwd=srcdir + '/YCSB', \
+		p = subprocess.Popen(['srun', '-N1', 'mvn', 'clean', 'package'], cwd=srcdir + '/YCSB', \
 			stdin=subprocess.PIPE, stdout=fout)
 		p.wait()
 
@@ -91,19 +106,106 @@ def do_setup():
 
 # -------------------------------------------------------------------------------------------------
 
-def do_cassandra_load():
-	print 'NIY'
+def do_load():
+        nodelist = get_slurm_nodelist()
+        print '> Running YCSB on nodes: ' + ', '.join(nodelist)
+	if len(nodelist) > 1:
+		print '[WARNING] Only one node used for running YCSB (allocation contains > 1)'
+	print '>'
+
+	if args.cassandra:
+		print '> Running against CASSANDRA (Instance: ' + args.cassandra[0] + ')'
+		print '> Loading instance description...'
+		with open(args.cassandra[0], 'r') as fjson:
+			json_str = fjson.read()
+		cassandra_instance = json.loads(json_str)
+
+		print '> Deleting old tables'
+		subprocess.call([cassandra_instance['cli-path'], \
+			'-h', cassandra_instance['nodes'][0], \
+			'-p', '9160', \
+			'-f', os.getcwd() + '/cassandra-reset.cql' \
+		])
+
+		print '> Setting up required tables...'
+		subprocess.call([cassandra_instance['cli-path'], \
+			'-h', cassandra_instance['nodes'][0], \
+			'-p', '9160', \
+			'-f', os.getcwd() + '/cassandra-ycsb.cql' \
+		])
+		print '> Finished setting up tables'
+		print '>'
+		print '> Executing YCSB workload...'
+		print '>'
+
+		myrundir = rundir + '-load'
+		make_dir(myrundir)
+		print '> Output redirected to ' + myrundir
+		print '>'
+
+		ycsb_workload = 'workloads/workloada'
+		ycsb_properties = { \
+			'recordcount':'100000', \
+			'hosts':'"' + ','.join(cassandra_instance['nodes']) + '"', \
+			'cassandra.connectionretries':'3', \
+			'cassandra.operationretries':'3', \
+		}
+
+		print '> YCSB Properties:'
+		for k,v in ycsb_properties.items():
+			print '> ' + k + ' = ' + v
+		print '>'
+
+		subprocess.call(['ln', '-s', '-f', '-T', myrundir, workdir + '/latest-load'])
+
+                srun_cmd = ['srun', '-N1', 'bin/ycsb']
+		srun_cmd += ['load', 'cassandra-10']
+                srun_cmd += ['-P', ycsb_workload]
+
+		for k,v in ycsb_properties.items():
+			srun_cmd += ['-p', k + '=' + v]
+
+                myoutfile = myrundir + '/stdout'
+                myerrfile = myrundir + '/stderr'
+
+		print '> Running YCSB...'
+                fout = open(myoutfile, 'w')
+                ferr = open(myerrfile, 'w')
+                p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, cwd=srcdir + '/YCSB')
+
+		def terminate_ycsb():
+			if p.poll() == None:
+				p.terminate()
+
+		atexit.register(terminate_ycsb)
+		p.wait()
+		print '> DONE'
+		print '>'	
+	else:
+		print '[ERROR] No supported database to run against given (e.g. --cassandra)'
 
 # -------------------------------------------------------------------------------------------------
 
 parser = argparse.ArgumentParser(description='Run script for YCSB on FireBox-0 cluster.')
 parser.add_argument('action', nargs=1, help='the action to perform (setup)')
+parser.add_argument('--cassandra', nargs=1, metavar='FILE', \
+	help='run against cassandra, using instance described by FILE')
 
 args = parser.parse_args()
 
 print '> ================================================================================'
 print '> YCSB RUN SCRIPT FOR FIREBOX-0 CLUSTER (VERSION ' + str(version) + ')'
 print '> ================================================================================'
+print '>'
+
+git_rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
+print '> GIT revision: ' + git_rev.replace('\n','')
+print '>'
+
+print '> Constants:'
+for v in print_vars:
+        print '> ' + v + '=' + globals()[v]
+
 print '>'
 
 if not os.environ['SLURM_NODELIST']:
@@ -114,7 +216,7 @@ print '> COMMAND = ' + str(args.action)
 
 if args.action[0] == 'setup':
 	do_setup()
-elif args.action[0] == 'start':
-	do_start()
+elif args.action[0] == 'load':
+	do_load()
 else:
 	print '[ERROR] Unknown action \'' + args.action[0] + '\''

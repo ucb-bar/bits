@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # Usage of cassandra.py script:
 # Need to run within a salloc allocation.
 # 
@@ -31,13 +33,19 @@ workdir = os.getcwd() + '/work'
 rundir = workdir + '/cassandra-' +  datetime.datetime.fromtimestamp(run_timestamp). \
 	strftime('%Y-%m-%d-%H-%M-%S')
 
+instance_json = rundir + '/cassandra.json'
+
 network_if = 'eth0'
 
-cassandra_version = '1.2.19'
+cassandra_version = '1.0.6'
 
 
-cassandra_url = 'http://mirror.reverse.net/pub/apache/cassandra/${VERSION}/' + \
+cassandra_url = 'http://archive.apache.org/dist/cassandra/${VERSION}/' + \
 	'apache-cassandra-${VERSION}-bin.tar.gz'
+
+# This mirror only provides new (supported) versions but may be faster:
+# cassandra_url = 'http://mirror.reverse.net/pub/apache/cassandra/${VERSION}/' + \
+#	'apache-cassandra-${VERSION}-bin.tar.gz'
 
 cassandra_filename = 'cassandra-' + cassandra_version + '.tar.gz'
 
@@ -49,17 +57,28 @@ commitlog_dir = local_dir + '/log'
 data_dir = local_dir + '/data'
 logfile = local_dir + '/system.log'
 
+print_vars = ['local_dir', 'saved_caches_dir', 'commitlog_dir', 'data_dir', 'logfile', \
+	'cassandra_version']
+
 # -------------------------------------------------------------------------------------------------
 
 def make_dir(mydir):
 	if not os.path.exists(mydir):
     		os.makedirs(mydir)
 
+# Return the list of nodes in the current SLURM allocation
+def get_slurm_nodelist():
+        nodelist = subprocess.check_output( \
+                ['scontrol', 'show', 'hostname', os.environ['SLURM_NODELIST']], \
+                universal_newlines=True)
+        nodelist = nodelist.strip().split('\n')
+	return nodelist
+
 # Return list of the Ip addresses for the chosen network_if on all nodes in nodelist
 def get_ip_addresses(nodelist):
 	results = subprocess.check_output( \
-		['srun', '--nodelist=' + ','.join(nodelist), 'bash', 'get_ip_address.sh'], \
-		universal_newlines=True)
+		['srun', '--nodelist=' + ','.join(nodelist), 'bash', 'get_ip_address.sh', \
+		network_if], universal_newlines=True)
 	json_str = '[' + ','.join(results.splitlines()) + ']'
 	raw_data = json.loads(json_str)
 	ip_map = {}
@@ -84,6 +103,14 @@ def do_setup():
 		print '> Downloading...'
 		urllib.urlretrieve(download_url, download_path)
 		print '> DONE'
+
+		# Check this is actually a reasonable file, not an error page.
+		if os.stat(download_path).st_size < 10000:
+			print '[ERROR] Downloaded file too small -- check it is available ' + \
+				'from the selected mirror.'
+			os.remove(download_path)
+			exit(1)
+			
 	else:
 		print '> Use previously downloaded Cassandra package at ' + cassandra_filename
 	print '>'
@@ -115,10 +142,7 @@ def shutdown_cassandra_instances():
 	print '> DONE'	
 
 def do_start():
-	nodelist = subprocess.check_output( \
-		['scontrol', 'show', 'hostname', os.environ['SLURM_NODELIST']], \
-		universal_newlines=True)
-	nodelist = nodelist.strip().split('\n')
+	nodelist = get_slurm_nodelist()
 	print '> Running cassandra on nodes: ' + ', '.join(nodelist)
 
 	confdir = outdir + '/config'
@@ -150,10 +174,13 @@ def do_start():
 
 		subprocess.call(['cp', '-r', cassandra_home + '/conf', myconfdir])
 
+		# Change stack size for older versions of Cassandra (necessary to run)
+		subprocess.call(['sed', '-i', 's/Xss128k/Xss256k/', \
+			myconfdir + '/conf/cassandra-env.sh'])
+
 		myip = ip_addresses[node]
 		
 		# Change working directoreis
-
 		my_cassandra_yaml = re.sub('(commitlog_directory:).*$', \
 			'\g<1> ' + commitlog_dir, cassandra_yaml, \
 			flags=re.MULTILINE)
@@ -171,7 +198,7 @@ def do_start():
 			flags=re.MULTILINE)
 
 		my_cassandra_yaml = re.sub('(rpc_address:).*$', \
-			'\g<1> ' + myip, my_cassandra_yaml, \
+			'\g<1> ' + '0.0.0.0', my_cassandra_yaml, \
 			flags=re.MULTILINE)
 
 		my_cassandra_log4j = re.sub('(log4j.appender.R.File=).*$', \
@@ -233,16 +260,27 @@ def do_start():
 		for node in unfinished_nodes:
 			with open(myoutfile, 'r') as fout:
 				outdata = fout.read()	
-			if re.search("XXX", outdata) != None:
+			if re.search("Listening for thrift clients...", outdata) != None:
 				done_nodes.append(node)
 		for node in done_nodes:
 			unfinished_nodes.remove(node)
 		time.sleep(0.01)
 
+	# Write a JSON description of the Cassandra instance that can be used by others.
+	print '> Writing instance description to ' + instance_json
+	cassandra_instance = { \
+		'nodes' : ip_addresses.values(), \
+		'cli-path' : cassandra_home + '/bin/cassandra-cli', \
+	}
+
+	json_str = json.dumps(cassandra_instance)
+	with open(instance_json, 'w') as fjson:
+		fjson.write(json_str)	
+
 	print '>'
 	print '> ALL NODES ARE UP! TERMINATE THIS PROCESS TO SHUT DOWN CASSANDRA CLUSTER.'
 	while True:
-		sleep(0.5)
+		time.sleep(0.5)
 
 # -------------------------------------------------------------------------------------------------
 
@@ -254,6 +292,16 @@ args = parser.parse_args()
 print '> ================================================================================'
 print '> CASSANDRA RUN SCRIPT FOR FIREBOX-0 CLUSTER (VERSION ' + str(version) + ')'
 print '> ================================================================================'
+print '>'
+
+git_rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
+print '> GIT revision: ' + git_rev.replace('\n','')
+print '>'
+
+print '> Constants:'
+for v in print_vars:
+	print '> ' + v + '=' + globals()[v]
+
 print '>'
 
 if not os.environ['SLURM_NODELIST']:
