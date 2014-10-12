@@ -18,6 +18,7 @@ import re
 import datetime
 import time
 import atexit
+import json
 
 run_timestamp = time.time()
 
@@ -29,6 +30,8 @@ outdir = '/nscratch/' + getpass.getuser() + '/cassandra'
 workdir = os.getcwd() + '/work'
 rundir = workdir + '/cassandra-' +  datetime.datetime.fromtimestamp(run_timestamp). \
 	strftime('%Y-%m-%d-%H-%M-%S')
+
+network_if = 'eth0'
 
 cassandra_version = '1.2.19'
 
@@ -51,6 +54,18 @@ logfile = local_dir + '/system.log'
 def make_dir(mydir):
 	if not os.path.exists(mydir):
     		os.makedirs(mydir)
+
+# Return list of the Ip addresses for the chosen network_if on all nodes in nodelist
+def get_ip_addresses(nodelist):
+	results = subprocess.check_output( \
+		['srun', '--nodelist=' + ','.join(nodelist), 'bash', 'get_ip_address.sh'], \
+		universal_newlines=True)
+	json_str = '[' + ','.join(results.splitlines()) + ']'
+	raw_data = json.loads(json_str)
+	ip_map = {}
+	for entry in raw_data:
+		ip_map[entry['host']] = entry['ip']
+	return ip_map
 
 # -------------------------------------------------------------------------------------------------
 
@@ -124,14 +139,20 @@ def do_start():
 	with open(log4j_fn, 'r') as flog4j:
 		cassandra_log4j = flog4j.read()
 
+	print '> Getting IP addresses for network interface ' + network_if
+	ip_addresses = get_ip_addresses(nodelist)
+
 	for node in nodelist:
 		myconfdir = confdir + '/' + node
 		print '> Writing configuration for node ' + node + ' (' + myconfdir + ')...'
 		make_dir(myconfdir)
 
 		subprocess.call(['cp', '-r', cassandra_home + '/conf', myconfdir])
+
+		myip = ip_addresses[node]
 		
 		# Change working directoreis
+
 		my_cassandra_yaml = re.sub('(commitlog_directory:).*$', \
 			'\g<1> ' + commitlog_dir, cassandra_yaml, \
 			flags=re.MULTILINE)
@@ -144,12 +165,20 @@ def do_start():
 			'\g<1>' + data_dir, my_cassandra_yaml, \
 			flags=re.MULTILINE|re.DOTALL)
 
+		my_cassandra_yaml = re.sub('(listen_address:).*$', \
+			'\g<1> ' + myip, my_cassandra_yaml, \
+			flags=re.MULTILINE)
+
+		my_cassandra_yaml = re.sub('(rpc_address:).*$', \
+			'\g<1> ' + myip, my_cassandra_yaml, \
+			flags=re.MULTILINE)
+
 		my_cassandra_log4j = re.sub('(log4j.appender.R.File=).*$', \
 			'\g<1>' + logfile, cassandra_log4j, \
 			flags=re.MULTILINE)
 
 		# Update seeds
-		seeds_string = ','.join(nodelist)
+		seeds_string = ','.join(ip_addresses.values())
 		my_cassandra_yaml = re.sub('(- seeds:).*$', \
 			'\g<1> "' + seeds_string + '"', my_cassandra_yaml, \
 			flags=re.MULTILINE)
