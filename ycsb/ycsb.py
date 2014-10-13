@@ -106,7 +106,31 @@ def do_setup():
 
 # -------------------------------------------------------------------------------------------------
 
-def do_load():
+# Set up required tables for Cassandra
+def prepare_ycsb_tables(cassandra_instance):
+	print '> Deleting old tables'
+	subprocess.call([cassandra_instance['cli-path'], \
+		'-h', cassandra_instance['nodes'][0], \
+		'-p', '9160', \
+		'-f', os.getcwd() + '/cassandra-reset.cql' \
+	])
+
+	print '> Setting up required tables...'
+	subprocess.call([cassandra_instance['cli-path'], \
+		'-h', cassandra_instance['nodes'][0], \
+		'-p', '9160', \
+		'-f', os.getcwd() + '/cassandra-ycsb.cql' \
+	])
+	print '> Finished setting up tables'
+	print '>'
+
+# Run YCSB (action can be load or run)
+def run_ycsb(action):
+	if not action in ['load', 'run']:
+		print '[ERROR] Invalid action ' + action
+		exit(1)
+	print '> Executing YCSB ' + action
+
         nodelist = get_slurm_nodelist()
         print '> Running YCSB on nodes: ' + ', '.join(nodelist)
 	if len(nodelist) > 1:
@@ -120,25 +144,13 @@ def do_load():
 			json_str = fjson.read()
 		cassandra_instance = json.loads(json_str)
 
-		print '> Deleting old tables'
-		subprocess.call([cassandra_instance['cli-path'], \
-			'-h', cassandra_instance['nodes'][0], \
-			'-p', '9160', \
-			'-f', os.getcwd() + '/cassandra-reset.cql' \
-		])
+		if action == 'load':
+			prepare_ycsb_tables(cassandra_instance)
 
-		print '> Setting up required tables...'
-		subprocess.call([cassandra_instance['cli-path'], \
-			'-h', cassandra_instance['nodes'][0], \
-			'-p', '9160', \
-			'-f', os.getcwd() + '/cassandra-ycsb.cql' \
-		])
-		print '> Finished setting up tables'
-		print '>'
 		print '> Executing YCSB workload...'
 		print '>'
 
-		myrundir = rundir + '-load'
+		myrundir = rundir + '-' + action
 		make_dir(myrundir)
 		print '> Output redirected to ' + myrundir
 		print '>'
@@ -146,9 +158,10 @@ def do_load():
 		ycsb_workload = 'workloads/workloada'
 		ycsb_properties = { \
 			'recordcount':'100000', \
-			'hosts':'"' + ','.join(cassandra_instance['nodes']) + '"', \
-			'cassandra.connectionretries':'3', \
-			'cassandra.operationretries':'3', \
+			'operationcount':'10000', \
+			'hosts':','.join(cassandra_instance['nodes']), \
+			'cassandra.connectionretries':'10', \
+			'cassandra.operationretries':'10', \
 		}
 
 		print '> YCSB Properties:'
@@ -156,10 +169,10 @@ def do_load():
 			print '> ' + k + ' = ' + v
 		print '>'
 
-		subprocess.call(['ln', '-s', '-f', '-T', myrundir, workdir + '/latest-load'])
+		subprocess.call(['ln', '-s', '-f', '-T', myrundir, workdir + '/latest-' + action])
 
                 srun_cmd = ['srun', '-N1', 'bin/ycsb']
-		srun_cmd += ['load', 'cassandra-10']
+		srun_cmd += [action, 'cassandra-10']
                 srun_cmd += ['-P', ycsb_workload]
 
 		for k,v in ycsb_properties.items():
@@ -169,6 +182,7 @@ def do_load():
                 myerrfile = myrundir + '/stderr'
 
 		print '> Running YCSB...'
+		print '> Command line: ' + ' '.join(srun_cmd)
                 fout = open(myoutfile, 'w')
                 ferr = open(myerrfile, 'w')
                 p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, cwd=srcdir + '/YCSB')
@@ -178,7 +192,10 @@ def do_load():
 				p.terminate()
 
 		atexit.register(terminate_ycsb)
-		p.wait()
+		p.communicate()
+		if p.returncode != 0:
+			print '[ERROR] There was an error executing YCSB.'
+			exit(1)
 		print '> DONE'
 		print '>'	
 	else:
@@ -217,6 +234,8 @@ print '> COMMAND = ' + str(args.action)
 if args.action[0] == 'setup':
 	do_setup()
 elif args.action[0] == 'load':
-	do_load()
+	run_ycsb('load')
+elif args.action[0] == 'run':
+	run_ycsb('run')
 else:
 	print '[ERROR] Unknown action \'' + args.action[0] + '\''

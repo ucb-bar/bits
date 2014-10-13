@@ -68,10 +68,10 @@ def make_dir(mydir):
 
 # Return the list of nodes in the current SLURM allocation
 def get_slurm_nodelist():
-        nodelist = subprocess.check_output( \
-                ['scontrol', 'show', 'hostname', os.environ['SLURM_NODELIST']], \
-                universal_newlines=True)
-        nodelist = nodelist.strip().split('\n')
+	nodelist = subprocess.check_output( \
+		['scontrol', 'show', 'hostname', os.environ['SLURM_NODELIST']], \
+		universal_newlines=True)
+	nodelist = nodelist.strip().split('\n')
 	return nodelist
 
 # Return list of the Ip addresses for the chosen network_if on all nodes in nodelist
