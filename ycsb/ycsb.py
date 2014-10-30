@@ -225,7 +225,7 @@ for v in print_vars:
 
 print '>'
 
-if not os.environ['SLURM_NODELIST']:
+if (not 'SLURM_NODELIST' in os.environ) or (not os.environ['SLURM_NODELIST']):
 	print '[ERROR] Need to run script within SLURM allocation'
 	exit(1)
 

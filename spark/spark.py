@@ -41,10 +41,12 @@ spark_version = '1.1.0'
 
 spark_master_port = '7077'
 
+spark_executor_memory = '32G'
+
 # For now, use the Hadoop-2.4 version (as this is what the cluster is running).
 spark_url = 'http://d3kbcqa49mib13.cloudfront.net/spark-${VERSION}-bin-hadoop2.4.tgz'
 
-spark_home = outdir + '/spark-1.1.0-bin-hadoop2.4'
+spark_home = outdir + '/spark-1.1.0-bin-hd2.3'
 
 print_vars = ['spark_version', 'spark_home', 'spark_master_port', 'network_if']
 
