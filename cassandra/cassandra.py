@@ -77,7 +77,7 @@ def get_slurm_nodelist():
 # Return list of the Ip addresses for the chosen network_if on all nodes in nodelist
 def get_ip_addresses(nodelist):
 	results = subprocess.check_output( \
-		['srun', '--nodelist=' + ','.join(nodelist), 'bash', 'get_ip_address.sh', \
+		['srun', '--nodelist=' + ','.join(nodelist), 'bash', '../common/get_ip_address.sh', \
 		network_if], universal_newlines=True)
 	json_str = '[' + ','.join(results.splitlines()) + ']'
 	raw_data = json.loads(json_str)
@@ -258,7 +258,7 @@ def do_start():
 	while unfinished_nodes:
 		done_nodes = []
 		for node in unfinished_nodes:
-			with open(myoutfile, 'r') as fout:
+			with open(cassandra_instances[node]['out'], 'r') as fout:
 				outdata = fout.read()	
 			if re.search("Listening for thrift clients...", outdata) != None:
 				done_nodes.append(node)
@@ -304,7 +304,7 @@ for v in print_vars:
 
 print '>'
 
-if not os.environ['SLURM_NODELIST']:
+if (not 'SLURM_NODELIST' in os.environ) or (not os.environ['SLURM_NODELIST']):
 	print '[ERROR] Need to run script within SLURM allocation'
 	exit(1)
 
