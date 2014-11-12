@@ -1,0 +1,417 @@
+
+
+-----------------------------------------------
+RDMA read latency between f2 and f1
+-----------------------------------------------
+---------------------------------------------------------------------------------------
+                    RDMA_Read Latency Test
+ Dual-port       : OFF		Device         : mlx4_1
+ Number of qps   : 1		Transport type : IB
+ Connection type : RC		Using SRQ      : OFF
+ TX depth        : 1
+ Mtu             : 2048[B]
+ Link type       : IB
+ Outstand reads  : 16
+ rdma_cm QPs	 : OFF
+ Data ex. method : Ethernet
+---------------------------------------------------------------------------------------
+ local address: LID 0x06 QPN 0x08eb PSN 0xb3ca0c OUT 0x10 RKey 0x58011707 VAddr 0x007fb89e405000
+ remote address: LID 0x0a QPN 0x08f0 PSN 0xe02b70 OUT 0x10 RKey 0x011708 VAddr 0x007ff2fe484000
+---------------------------------------------------------------------------------------
+ #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]
+ 2       1000          1.67           13.59        1.70   
+---------------------------------------------------------------------------------------
+
+************************************
+* Waiting for client to connect... *
+************************************
+---------------------------------------------------------------------------------------
+                    RDMA_Read Latency Test
+ Dual-port       : OFF		Device         : mlx4_1
+ Number of qps   : 1		Transport type : IB
+ Connection type : RC		Using SRQ      : OFF
+ Mtu             : 2048[B]
+ Link type       : IB
+ Outstand reads  : 16
+ rdma_cm QPs	 : OFF
+ Data ex. method : Ethernet
+---------------------------------------------------------------------------------------
+ local address: LID 0x0a QPN 0x08f0 PSN 0xe02b70 OUT 0x10 RKey 0x011708 VAddr 0x007ff2fe484000
+ remote address: LID 0x06 QPN 0x08eb PSN 0xb3ca0c OUT 0x10 RKey 0x58011707 VAddr 0x007fb89e405000
+---------------------------------------------------------------------------------------
+
+
+-----------------------------------------------
+RDMA write latency between f2 and f1
+-----------------------------------------------
+---------------------------------------------------------------------------------------
+                    RDMA_Write Latency Test
+ Dual-port       : OFF		Device         : mlx4_1
+ Number of qps   : 1		Transport type : IB
+ Connection type : RC		Using SRQ      : OFF
+ TX depth        : 1
+ Mtu             : 2048[B]
+ Link type       : IB
+ Max inline data : 220[B]
+ rdma_cm QPs	 : OFF
+ Data ex. method : Ethernet
+---------------------------------------------------------------------------------------
+ local address: LID 0x06 QPN 0x08ec PSN 0x891d46 RKey 0x60011707 VAddr 0x007f05f206f000
+ remote address: LID 0x0a QPN 0x08f1 PSN 0x21c6ba RKey 0x8011708 VAddr 0x007fe9341b3000
+---------------------------------------------------------------------------------------
+ #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]
+ 2       1000          0.83           2.57         0.85   
+---------------------------------------------------------------------------------------
+
+************************************
+* Waiting for client to connect... *
+************************************
+---------------------------------------------------------------------------------------
+                    RDMA_Write Latency Test
+ Dual-port       : OFF		Device         : mlx4_1
+ Number of qps   : 1		Transport type : IB
+ Connection type : RC		Using SRQ      : OFF
+ Mtu             : 2048[B]
+ Link type       : IB
+ Max inline data : 220[B]
+ rdma_cm QPs	 : OFF
+ Data ex. method : Ethernet
+---------------------------------------------------------------------------------------
+ local address: LID 0x0a QPN 0x08f1 PSN 0x21c6ba RKey 0x8011708 VAddr 0x007fe9341b3000
+ remote address: LID 0x06 QPN 0x08ec PSN 0x891d46 RKey 0x60011707 VAddr 0x007f05f206f000
+---------------------------------------------------------------------------------------
+ #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]
+ 2       1000          0.84           5.27         0.85   
+---------------------------------------------------------------------------------------
+
+
+-----------------------------------------------
+IB Reliable connect between f2 and f1
+-----------------------------------------------
+  local address:  LID 0x000a, QPN 0x0008f2, PSN 0xfcea96, GID ::
+  remote address: LID 0x0006, QPN 0x0008ed, PSN 0x33cb81, GID ::
+8192000 bytes in 0.00 seconds = 13799.96 Mbit/sec
+1000 iters in 0.00 seconds = 4.75 usec/iter
+  local address:  LID 0x0006, QPN 0x0008ed, PSN 0x33cb81, GID ::
+  remote address: LID 0x000a, QPN 0x0008f2, PSN 0xfcea96, GID ::
+8192000 bytes in 0.00 seconds = 14203.73 Mbit/sec
+1000 iters in 0.00 seconds = 4.61 usec/iter
+
+
+-----------------------------------------------
+IB Unreliable connect between f2 and f1
+-----------------------------------------------
+  local address:  LID 0x000a, QPN 0x0008f3, PSN 0xf59aee, GID ::
+  remote address: LID 0x0006, QPN 0x0008ee, PSN 0x46eece, GID ::
+8192000 bytes in 0.00 seconds = 14105.90 Mbit/sec
+1000 iters in 0.00 seconds = 4.65 usec/iter
+  local address:  LID 0x0006, QPN 0x0008ee, PSN 0x46eece, GID ::
+  remote address: LID 0x000a, QPN 0x0008f3, PSN 0xf59aee, GID ::
+8192000 bytes in 0.00 seconds = 14492.70 Mbit/sec
+1000 iters in 0.00 seconds = 4.52 usec/iter
+
+
+-----------------------------------------------
+IB Unreliable datagram connect between f2 and f1
+-----------------------------------------------
+  local address:  LID 0x000a, QPN 0x0008f4, PSN 0xaedb33: GID ::
+  remote address: LID 0x0006, QPN 0x0008ef, PSN 0xa5f615, GID ::
+2048000 bytes in 0.00 seconds = 4181.73 Mbit/sec
+1000 iters in 0.00 seconds = 3.92 usec/iter
+  local address:  LID 0x0006, QPN 0x0008ef, PSN 0xa5f615: GID ::
+  remote address: LID 0x000a, QPN 0x0008f4, PSN 0xaedb33, GID ::
+2048000 bytes in 0.00 seconds = 4322.96 Mbit/sec
+1000 iters in 0.00 seconds = 3.79 usec/iter
+
+
+-----------------------------------------------
+RDMA read bandwidth between f2 and f1
+-----------------------------------------------
+
+************************************
+* Waiting for client to connect... *
+************************************
+---------------------------------------------------------------------------------------
+                    RDMA_Read BW Test
+ Dual-port       : OFF		Device         : mlx4_1
+ Number of qps   : 1		Transport type : IB
+ Connection type : RC		Using SRQ      : OFF
+ CQ Moderation   : 100
+ Mtu             : 2048[B]
+ Link type       : IB
+ Outstand reads  : 16
+ rdma_cm QPs	 : OFF
+ Data ex. method : Ethernet
+---------------------------------------------------------------------------------------
+ local address: LID 0x0a QPN 0x08f5 PSN 0x7025e0 OUT 0x10 RKey 0x28011708 VAddr 0x007f777c88a000
+ remote address: LID 0x06 QPN 0x08f0 PSN 0x5c319e OUT 0x10 RKey 0x80011707 VAddr 0x007f72ef476000
+---------------------------------------------------------------------------------------
+ #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]
+ 65536      1000           6054.39            6035.90		   0.096574
+---------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+                    RDMA_Read BW Test
+ Dual-port       : OFF		Device         : mlx4_1
+ Number of qps   : 1		Transport type : IB
+ Connection type : RC		Using SRQ      : OFF
+ TX depth        : 128
+ CQ Moderation   : 100
+ Mtu             : 2048[B]
+ Link type       : IB
+ Outstand reads  : 16
+ rdma_cm QPs	 : OFF
+ Data ex. method : Ethernet
+---------------------------------------------------------------------------------------
+ local address: LID 0x06 QPN 0x08f0 PSN 0x5c319e OUT 0x10 RKey 0x80011707 VAddr 0x007f72ef476000
+ remote address: LID 0x0a QPN 0x08f5 PSN 0x7025e0 OUT 0x10 RKey 0x28011708 VAddr 0x007f777c88a000
+---------------------------------------------------------------------------------------
+ #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]
+ 65536      1000           6054.39            6035.90		   0.096574
+---------------------------------------------------------------------------------------
+
+
+-----------------------------------------------
+RDMA write bandwidth between f2 and f1
+-----------------------------------------------
+
+************************************
+* Waiting for client to connect... *
+************************************
+---------------------------------------------------------------------------------------
+                    RDMA_Write BW Test
+ Dual-port       : OFF		Device         : mlx4_1
+ Number of qps   : 1		Transport type : IB
+ Connection type : RC		Using SRQ      : OFF
+ CQ Moderation   : 100
+ Mtu             : 2048[B]
+ Link type       : IB
+ Max inline data : 0[B]
+ rdma_cm QPs	 : OFF
+ Data ex. method : Ethernet
+---------------------------------------------------------------------------------------
+ local address: LID 0x0a QPN 0x08f6 PSN 0x658948 RKey 0x30011708 VAddr 0x007fa2968c0000
+ remote address: LID 0x06 QPN 0x08f1 PSN 0x8d7979 RKey 0x88011707 VAddr 0x007f2c4f394000
+---------------------------------------------------------------------------------------
+ #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]
+ 65536      5000           6081.49            6081.07		   0.097297
+---------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+                    RDMA_Write BW Test
+ Dual-port       : OFF		Device         : mlx4_1
+ Number of qps   : 1		Transport type : IB
+ Connection type : RC		Using SRQ      : OFF
+ TX depth        : 128
+ CQ Moderation   : 100
+ Mtu             : 2048[B]
+ Link type       : IB
+ Max inline data : 0[B]
+ rdma_cm QPs	 : OFF
+ Data ex. method : Ethernet
+---------------------------------------------------------------------------------------
+ local address: LID 0x06 QPN 0x08f1 PSN 0x8d7979 RKey 0x88011707 VAddr 0x007f2c4f394000
+ remote address: LID 0x0a QPN 0x08f6 PSN 0x658948 RKey 0x30011708 VAddr 0x007fa2968c0000
+---------------------------------------------------------------------------------------
+ #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]
+ 65536      5000           6081.49            6081.07		   0.097297
+---------------------------------------------------------------------------------------
+
+
+-----------------------------------------------
+(iperf) bandwidth between f2 and f1
+-----------------------------------------------
+------------------------------------------------------------
+Server listening on TCP port 5001
+TCP window size: 85.3 KByte (default)
+------------------------------------------------------------
+------------------------------------------------------------
+Client connecting to f1, TCP port 5001
+TCP window size: 85.0 KByte (default)
+------------------------------------------------------------
+[ 10] local 10.10.49.84 port 46990 connected with 10.10.49.83 port 5001
+[  6] local 10.10.49.84 port 46984 connected with 10.10.49.83 port 5001
+[  5] local 10.10.49.84 port 46983 connected with 10.10.49.83 port 5001
+[  7] local 10.10.49.84 port 46985 connected with 10.10.49.83 port 5001
+[  6] local 10.10.49.83 port 5001 connected with 10.10.49.84 port 46985
+[  8] local 10.10.49.84 port 46986 connected with 10.10.49.83 port 5001
+[  4] local 10.10.49.84 port 46987 connected with 10.10.49.83 port 5001
+[  3] local 10.10.49.84 port 46988 connected with 10.10.49.83 port 5001
+[  9] local 10.10.49.84 port 46989 connected with 10.10.49.83 port 5001
+[  5] local 10.10.49.83 port 5001 connected with 10.10.49.84 port 46984
+[  7] local 10.10.49.83 port 5001 connected with 10.10.49.84 port 46986
+[  4] local 10.10.49.83 port 5001 connected with 10.10.49.84 port 46983
+[  8] local 10.10.49.83 port 5001 connected with 10.10.49.84 port 46987
+[  9] local 10.10.49.83 port 5001 connected with 10.10.49.84 port 46988
+[ 10] local 10.10.49.83 port 5001 connected with 10.10.49.84 port 46989
+[ 11] local 10.10.49.83 port 5001 connected with 10.10.49.84 port 46990
+[ ID] Interval       Transfer     Bandwidth
+[ 10]  0.0-10.0 sec  4.25 GBytes  3.65 Gbits/sec
+[  6]  0.0-10.0 sec  8.54 GBytes  7.34 Gbits/sec
+[  5]  0.0-10.0 sec  3.64 GBytes  3.12 Gbits/sec
+[  7]  0.0-10.0 sec  4.71 GBytes  4.05 Gbits/sec
+[  8]  0.0-10.0 sec  5.96 GBytes  5.12 Gbits/sec
+[  4]  0.0-10.0 sec  6.06 GBytes  5.20 Gbits/sec
+[  3]  0.0-10.0 sec  5.10 GBytes  4.38 Gbits/sec
+[  9]  0.0-10.0 sec  5.44 GBytes  4.67 Gbits/sec
+[SUM]  0.0-10.0 sec  43.7 GBytes  37.5 Gbits/sec
+[ ID] Interval       Transfer     Bandwidth
+[  6]  0.0-10.0 sec  4.71 GBytes  4.05 Gbits/sec
+[  5]  0.0-10.0 sec  8.54 GBytes  7.33 Gbits/sec
+[  7]  0.0-10.0 sec  5.96 GBytes  5.12 Gbits/sec
+[  4]  0.0-10.0 sec  3.64 GBytes  3.12 Gbits/sec
+[  8]  0.0-10.0 sec  6.06 GBytes  5.20 Gbits/sec
+[  9]  0.0-10.0 sec  5.10 GBytes  4.38 Gbits/sec
+[ 10]  0.0-10.0 sec  5.44 GBytes  4.67 Gbits/sec
+[ 11]  0.0-10.0 sec  4.25 GBytes  3.65 Gbits/sec
+[SUM]  0.0-10.0 sec  43.7 GBytes  37.5 Gbits/sec
+
+
+-----------------------------------------------
+Intel MPI ping pong benchmark between two nodes
+-----------------------------------------------
+[1415672514.394294] [f2:4807 :0]         shm.c:65   MXM  WARN  Could not open the KNEM device file at /dev/knem : No such file or directory. Won't use knem.
+[1415672514.440694] [f1:25897:0]         shm.c:65   MXM  WARN  Could not open the KNEM device file at /dev/knem : No such file or directory. Won't use knem.
+ benchmarks to run pingpong 
+#------------------------------------------------------------
+#    Intel (R) MPI Benchmarks 4.0, MPI-1 part    
+#------------------------------------------------------------
+# Date                  : Mon Nov 10 18:21:54 2014
+# Machine               : x86_64
+# System                : Linux
+# Release               : 3.13.0-35-generic
+# Version               : #62-Ubuntu SMP Fri Aug 15 01:58:42 UTC 2014
+# MPI Version           : 3.0
+# MPI Thread Environment: 
+
+# New default behavior from Version 3.2 on:
+
+# the number of iterations per message size is cut down 
+# dynamically when a certain run time (per message size sample) 
+# is expected to be exceeded. Time limit is defined by variable 
+# "SECS_PER_SAMPLE" (=> IMB_settings.h) 
+# or through the flag => -time 
+  
+
+
+# Calling sequence was: 
+
+# /home/eecs/joao/mpi_benchmark/imb/src/IMB-MPI1 pingpong
+
+# Minimum message length in bytes:   0
+# Maximum message length in bytes:   4194304
+#
+# MPI_Datatype                   :   MPI_BYTE 
+# MPI_Datatype for reductions    :   MPI_FLOAT
+# MPI_Op                         :   MPI_SUM  
+#
+#
+
+# List of Benchmarks to run:
+
+# PingPong
+
+#---------------------------------------------------
+# Benchmarking PingPong 
+# #processes = 2 
+#---------------------------------------------------
+       #bytes #repetitions      t[usec]   Mbytes/sec
+            0         1000         1.86         0.00
+            1         1000         1.72         0.56
+            2         1000         1.81         1.05
+            4         1000         1.81         2.10
+            8         1000         1.70         4.49
+           16         1000         1.84         8.29
+           32         1000         1.79        17.07
+           64         1000         1.83        33.32
+          128         1000         2.03        60.03
+          256         1000         2.29       106.40
+          512         1000         2.46       198.82
+         1024         1000         2.79       349.59
+         2048         1000         3.23       604.60
+         4096         1000         5.01       780.32
+         8192         1000         6.06      1289.93
+        16384         1000         8.29      1884.36
+        32768         1000        12.48      2503.62
+        65536          640        21.25      2941.72
+       131072          320        33.18      3767.54
+       262144          160        57.37      4357.78
+       524288           80       105.02      4761.05
+      1048576           40       204.63      4886.97
+      2097152           20       423.68      4720.59
+      4194304           10       873.09      4581.44
+
+
+# All processes entering MPI_Finalize
+
+
+
+-----------------------------------------------
+Sockperf ping pong benchmark (w/o kernel bypass) between f2 and f1
+-----------------------------------------------
+sockperf: [2;35m== version #2.5.241 == [0m
+sockperf: [SERVER] listen on:
+[ 0] IP = 0.0.0.0         PORT = 11111 # UDP
+sockperf: Warmup stage (sending a few dummy messages)...
+sockperf: [tid 25954] using recvfrom() to block on socket(s)
+sockperf: [2;35m== version #2.5.241 == [0m
+sockperf[CLIENT] send on:sockperf: using recvfrom() to block on socket(s)
+
+[ 0] IP = 10.10.49.83     PORT = 11111 # UDP
+sockperf: Warmup stage (sending a few dummy messages)...
+sockperf: Starting test...
+sockperf: Test end (interrupted by timer)
+sockperf: Test ended
+sockperf: [Total Run] RunTime=1.100 sec; SentMessages=97460; ReceivedMessages=97459
+sockperf: ========= Printing statistics for Server No: 0
+sockperf: [Valid Duration] RunTime=1.000 sec; SentMessages=88613; ReceivedMessages=88613
+sockperf: [2;35m====> avg-lat=  5.624 (std-dev=0.216)[0m
+sockperf: # dropped messages = 0; # duplicated messages = 0; # out-of-order messages = 0
+sockperf: Summary: Latency is 5.624 usec
+sockperf: [2;35mTotal 88613 observations[0m; each percentile contains 886.13 observations
+sockperf: ---> <MAX> observation =   32.595
+sockperf: ---> percentile  99.99 =    9.165
+sockperf: ---> percentile  99.90 =    7.510
+sockperf: ---> percentile  99.50 =    6.657
+sockperf: ---> percentile  99.00 =    6.328
+sockperf: ---> percentile  95.00 =    5.946
+sockperf: ---> percentile  90.00 =    5.812
+sockperf: ---> percentile  75.00 =    5.662
+sockperf: ---> percentile  50.00 =    5.587
+sockperf: ---> percentile  25.00 =    5.527
+sockperf: ---> <MIN> observation =    5.181
+
+
+-----------------------------------------------
+Sockperf ping pong benchmark (with kernel bypass) between f2 and f1
+-----------------------------------------------
+sockperf: This version is not compiled with VMA extra API
+sockperf: [2;35m== version #2.5.241 == [0m
+sockperf: [SERVER] listen on:
+[ 0] IP = 0.0.0.0         PORT = 11111 # UDP
+sockperf: Warmup stage (sending a few dummy messages)...
+sockperf: [tid 26065] using recvfrom() to block on socket(s)
+sockperf: [2;35m== version #2.5.241 == [0m
+sockperf[CLIENT] send on:sockperf: using recvfrom() to block on socket(s)
+
+[ 0] IP = 10.10.49.83     PORT = 11111 # UDP
+sockperf: Warmup stage (sending a few dummy messages)...
+sockperf: Starting test...
+sockperf: Test end (interrupted by timer)
+sockperf: Test ended
+sockperf: [Total Run] RunTime=1.100 sec; SentMessages=358151; ReceivedMessages=358150
+sockperf: ========= Printing statistics for Server No: 0
+sockperf: [Valid Duration] RunTime=1.000 sec; SentMessages=327499; ReceivedMessages=327499
+sockperf: [2;35m====> avg-lat=  1.512 (std-dev=0.363)[0m
+sockperf: # dropped messages = 0; # duplicated messages = 0; # out-of-order messages = 0
+sockperf: Summary: Latency is 1.512 usec
+sockperf: [2;35mTotal 327499 observations[0m; each percentile contains 3274.99 observations
+sockperf: ---> <MAX> observation =   62.219
+sockperf: ---> percentile  99.99 =    5.286
+sockperf: ---> percentile  99.90 =    3.453
+sockperf: ---> percentile  99.50 =    2.809
+sockperf: ---> percentile  99.00 =    2.681
+sockperf: ---> percentile  95.00 =    2.156
+sockperf: ---> percentile  90.00 =    1.884
+sockperf: ---> percentile  75.00 =    1.590
+sockperf: ---> percentile  50.00 =    1.363
+sockperf: ---> percentile  25.00 =    1.320
+sockperf: ---> <MIN> observation =    1.263
