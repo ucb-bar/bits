@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+
 import getpass
 import os
 import glob
@@ -11,6 +12,7 @@ import argparse
 import sys
 from math import ceil
 from collections import defaultdict
+import urllib2
 network_if = 'eth0'
 
 
@@ -29,7 +31,7 @@ zk_app_zip = 'zookeeper-{version}.tar.gz'.format(version=zk_version)
 zk_app = 'zookeeper-{version}'.format(version=zk_version)
 local_zk_zip = WORK_DIR + zk_app_zip
 
-# Remove old data and create zk_dir anew
+
 zk_dir = REMOTE_DIR + zk_app
 zk_data_dir = os.path.join(zk_dir, 'data')
 zk_conf_dir = os.path.join(zk_dir, 'conf')
@@ -37,6 +39,15 @@ zk_conf_dir = os.path.join(zk_dir, 'conf')
 solr_app_tgz = 'solr-{version}.tgz'.format(version=solr_version)
 solr_app = 'solr-{version}'.format(version=solr_version)
 local_solr_tgz = os.path.join(WORK_DIR, solr_app_tgz)
+
+DNULL = open(os.devnull, 'w')
+
+######## Helper functions
+
+class _HeadRequest(urllib2.Request):
+    '''Note: this from solr-scale-tk'''
+    def get_method(self):
+        return 'HEAD'
 
 
 ######## Zookeeper
@@ -60,7 +71,7 @@ def _gen_zoo_cfg(zkHosts):
 
 def _zk_ensemble(hosts):
     # Remove previous instance of app
-#     if os.path.exists(zk_dir):
+
     print local_zk_zip
     remote_zip = REMOTE_DIR + zk_app_zip
     print zk_dir
@@ -113,9 +124,7 @@ def stop_zk_ensemble(hosts=None):
 
     # Kill all zookeeper processes started by current user
     subprocess.call(['srun', 'pkill', '-f','-U', getpass.getuser(), 
-                     'zookeeper'])
-
-
+                     'zookeeper'], stderr=DNULL)
 
 def _zk_host_str():
     zk_hosts = get_hosts()['zk_hosts']
@@ -123,6 +132,63 @@ def _zk_host_str():
 
 
 ######## Solr
+
+def _check_solr_running(instance):
+    running = False
+    try:
+        urllib2.urlopen(_HeadRequest('http://%s/solr/#/' % instance))
+        running = True
+    except:
+        running = False
+
+    return running
+
+def solr_instances_running(instances):
+    all_running = False
+    max_time = 255 # seconds
+    elapsed_time = 0
+    i = 0
+    while not all_running:
+        if elapsed_time >= max_time:
+            print 'Time expired for solr check. Not all instances are running.'
+            return all_running
+        
+        all_running = all(map(_check_solr_running, instances))
+        wait_time = 2**i
+        i += 1
+        if not all_running:
+            print 'Waiting for instances to start.',
+            print 'Will check again in {} seconds'.format(wait_time)
+            time.sleep(wait_time)
+        elapsed_time += wait_time
+        
+    print 'All solr instances are running'
+    return all_running
+            
+
+def _install_new_solr_instance(host, cur_id, remote_zip):
+    cur_dir = os.path.join(REMOTE_DIR, str(cur_id))
+    cur_solr_dir = os.path.join(cur_dir, solr_app)
+    srun_cmd = ['srun', '--nodelist=' + host, '-N1']
+    srun_cmd1 = ['rm', '-rf', cur_dir] # Remove existing dir
+    srun_cmd2 = ['mkdir', cur_dir] # Make new dir
+    srun_cmd3 = ['tar', 'xzfv', remote_zip, '-C', cur_dir, '&>', 
+                 '/dev/null']
+    srun_cmd4 = ['cp', WORK_DIR+'schema.xml', os.path.join(
+            cur_solr_dir,'example/solr/collection1/conf/schema.xml')]
+    srun_cmd5 = ['cp', WORK_DIR+'solrconfig.xml', os.path.join(
+       cur_solr_dir, 'example/solr/collection1/conf/solrconfig.xml')]
+    
+    # Remove previous solr dir
+    subprocess.call(srun_cmd+srun_cmd1)
+    
+    # Create new dir, unzip new solr instance into it
+    subprocess.call(srun_cmd+srun_cmd2)
+    subprocess.call(' '.join(srun_cmd+srun_cmd3), shell=True)
+    
+    # Copy config file to new instance
+    subprocess.call(srun_cmd+srun_cmd4)
+    subprocess.call(srun_cmd+srun_cmd5)
 
 def setup_solr_instances(hosts, n_instances, install_new=True):
     '''Setup solr instances. Copy a version of solr to nodes in a round
@@ -144,35 +210,16 @@ def setup_solr_instances(hosts, n_instances, install_new=True):
     instance_ports = defaultdict(list)
     print 'Setting up instances...'
     for r in range(rounds):
-        cur_dir = os.path.join(REMOTE_DIR, str(cur_dir_id))
-        cur_solr_dir = os.path.join(cur_dir, solr_app)
+
         for n, h in enumerate(hosts):
             if added + 1 > n_instances:
                 break
             print 'Setting up solr instance {} on host {}:{}'.format(
                                                     added + 1, h, cur_dir_id)
             
-            srun_cmd = ['srun', '--nodelist=' + h, '-N1']
-            srun_cmd1 = ['rm', '-rf', cur_dir] # Remove existing dir
-            srun_cmd2 = ['mkdir', cur_dir] # Make new dir
-            srun_cmd3 = ['tar', 'xzfv', remote_zip, '-C', cur_dir, '&>', 
-                         '/dev/null']
-            srun_cmd4 = ['cp', WORK_DIR+'schema.xml', os.path.join(
-                    cur_solr_dir,'example/solr/collection1/conf/schema.xml')]
-            srun_cmd5 = ['cp', WORK_DIR+'solrconfig.xml', os.path.join(
-               cur_solr_dir, 'example/solr/collection1/conf/solrconfig.xml')]
             
             if install_new:
-                # Remove previous solr dir
-                subprocess.call(srun_cmd+srun_cmd1)
-                
-                # Create new dir, unzip new solr instance into it
-                subprocess.call(srun_cmd+srun_cmd2)
-                subprocess.call(' '.join(srun_cmd+srun_cmd3), shell=True)
-                
-                # Copy config file to new instance
-                subprocess.call(srun_cmd+srun_cmd4)
-                subprocess.call(srun_cmd+srun_cmd5)
+                _install_new_solr_instance(h, cur_dir_id, remote_zip)
             
             
             instance_ports[h].append(cur_dir_id)
@@ -183,12 +230,19 @@ def setup_solr_instances(hosts, n_instances, install_new=True):
         
     return instance_ports
     
-def _start_instances(instance_hosts, n_shards, zk_hosts_str):
+def _start_instances(instance_hosts, n_shards, zk_hosts_str=None):
+    if not zk_hosts_str:
+        zk_hosts_str = _zk_host_str()
+    all_instances = []
     for h in instance_hosts:
         srun_cmd = ' '.join(['srun', '--nodelist=' + h, '-N1'])
     
-        jmx_port = 9010
         for port in instance_hosts[h]:
+            # Collection host:port string of all instances
+            all_instances.append('{host}:{port}'.format(host=h, port=port))
+            
+            # increment jmx port with the initial solr port (8983)
+            jmx_port = 9010 + int(port) - 8983
             
             # cd into the solr instance dir that will be run
             cur_dir = os.path.join(str(port), solr_app+'/example')
@@ -208,12 +262,15 @@ def _start_instances(instance_hosts, n_shards, zk_hosts_str):
             '-Dcom.sun.management.jmxremote.ssl=false', '-jar', 'start.jar', 
             '>', '/dev/null', '2>&1', '&'])
             
-            jmx_port += 1
+
             print 'Starting solr instance at {}:{}'.format(h, port)
-        subprocess.call(' ' .join([srun_cmd, srun_cmd1, srun_cmd2]), 
+            subprocess.call(' ' .join([srun_cmd, srun_cmd1, srun_cmd2]), 
                         shell=True)
-
-
+        
+    
+    print 'Waiting for instances to start...'
+    time.sleep(5)
+    solr_instances_running(all_instances)
 
 def run_solr_instances(instance_hosts, zk_hosts, n_shards, n_instances=None):
     zk_hosts_str = _zk_host_str(zk_hosts)
@@ -223,32 +280,55 @@ def run_solr_instances(instance_hosts, zk_hosts, n_shards, n_instances=None):
     _start_instances(instance_hosts, n_shards, zk_hosts_str)
 
 def stop_solr():
-    print 'Pid of running instances:'
-    subprocess.call(['srun', 'pgrep', '-f','-U', getpass.getuser(), 
-                     'start.jar'])
-    print 'Killing all solr instances'
-    subprocess.call(['srun', 'pkill', '-f','-U', getpass.getuser(), 
-                     'start.jar'])
+    hosts = get_hosts()['solr_hosts']
+    
+    for host in hosts:
+        print 'Stopping solr instances on', host
+#         subprocess.call(['srun','--nodelist=' + host, '-N1', 'pgrep', '-f', 
+#                          'start.jar', '-U', getpass.getuser()])
+        subprocess.call(['srun', '--nodelist=' + host, '-N1', 'pkill', '-f', 
+                         'start.jar', '-U', getpass.getuser()],
+                        stderr=DNULL)
 
 def restart_solr_instances(n_instances=3, n_shards=3):
-    
+    stop_solr()
+    time.sleep(5)
     hosts = get_hosts()['solr_hosts']
     zk_host_str = _zk_host_str()
     print 'Restarting solr instances with zk servers: {}'.format(zk_host_str)
     instances = setup_solr_instances(hosts, n_instances, install_new=False)
     _start_instances(instances, n_shards, zk_host_str)
 
-def submit_doc(url):
-    subprocess.call(' '.join(['curl', url]), shell=True)
+
+def add_solr_instances(n_instances, n_shards):
+    '''Add instances to an existing, healthy* cluster.
+    
+    *No nodes with indexed data should be down.
+    '''
+    remote_zip = os.path.join(REMOTE_DIR, solr_app_tgz)
+    hosts = get_hosts()['solr_hosts']
+    all_instances = setup_solr_instances(hosts, n_instances, install_new=False)
+    instances_to_create = defaultdict(list)
+    for host in all_instances:
+        for port in all_instances[host]:
+            instance = ':'.join([host, str(port)])
+            if not _check_solr_running(instance):
+                instances_to_create[host].append(port)
+                _install_new_solr_instance(host, str(port), remote_zip)
+    
+    _start_instances(instances_to_create, 3)
 
 
 ######## Add / Query documents
 
-def index_sample_documents(hosts, dir=SOLR_DOCS_DIR, processes=2):
+def submit_doc(url):
+    subprocess.call(' '.join(['curl', url]), shell=True)
+    
+def index_sample_documents(dir=SOLR_DOCS_DIR, processes=2):
     print 'Indexing sample documents. Warning: this may take a few hours'
     pool = multiprocessing.Pool(processes=processes)
     docs = []
-    hosts = hosts.keys()
+    hosts = get_hosts()['solr_hosts'].keys()
     target = '"http://{}:8983/solr/update'.format(hosts[0])
     params = '?stream.file={}&stream.contentType=application/json;charset=utf-8"'
     
@@ -260,13 +340,32 @@ def index_sample_documents(hosts, dir=SOLR_DOCS_DIR, processes=2):
 
 def test_query():
     
-    host = get_hosts()['solr_hosts'].keys()[0] #Pick first solr node off list
+    host = get_hosts()['solr_hosts'].keys()[0] # Pick first solr node off list
     url = '"http://{host}:8983'.format(host=host)
     print 'Submitting test query to {}:8983'.format(host)
     url += '/solr/select?df=text&fl=title&q=computer+science"'
     subprocess.call('curl ' + url, shell=True)
     
-
+def run_demo(num_shards=3, n_instances=3):
+    hosts = get_hosts()
+    zk_hosts = hosts['zk_hosts']
+    solr_hosts = hosts['solr_hosts']
+    setup_zk_ensemble(zk_hosts)
+    start_zk_ensemble(zk_hosts)
+    # check_zk_running(zk_hosts)
+    solr_hosts = setup_solr_instances(solr_hosts, n_instances, 
+                                      install_new=True)
+    run_solr_instances(solr_hosts, zk_hosts=zk_hosts, n_shards=num_shards)
+    subprocess.call(['sleep', '10'])
+    
+    index_prompt = raw_input('''Would you like to start indexing the sample 
+    collection (/nscratch/zach/fbox-data)? Warning: indexing may take a few
+    hours [Y/n]''')
+    
+    if index_prompt.upper() == 'Y':
+        index_sample_documents()
+    
+    
 # Get hosts for current setup
 
 def get_hosts():
@@ -311,17 +410,28 @@ def get_ip_addresses(nodelist):
         ip_map[entry['host']] = entry['ip']
     return ip_map
 
-
 #### Commands
 
 parser = argparse.ArgumentParser(
                          description='Setup SolrCloud to run on Firebox-0.')
-parser.add_argument('action', nargs=1,
-    help='''the action to perform: setup-zk, start-zk, stop-zk, setup-solr,
-    start-solr, stop-solr, restart-solr, run-demo, index-samples, test-query.
-    
-    "run-demo" starts 3 zookeeper instances and 3 solr instances/shards
-    '''
+parser.add_argument('action',
+    help='''Available actions: 
+    setup-zk 
+    start-zk 
+    stop-zk 
+    setup-solr 
+    start-solr
+    stop-solr
+    restart-solr
+    run-demo
+    index-samples
+    test-query
+    ''')
+
+parser.add_argument('--instances', type=int, default=3, \
+                    help='The number of solr instances to setup/run. default=3')
+parser.add_argument('--shards', type=int, default=3, \
+                    help='The number of shards in the collection. default=3')
 
 args = parser.parse_args()
 
@@ -332,39 +442,41 @@ if not os.environ['SLURM_NODELIST']:
 
 print '> COMMAND = ' + str(args.action)
 
-if args.action[0] == 'setup-zk':
-    setup_zk_ensemble()
-elif args.action[0] == 'start-zk':
-    start_zk_ensemble()
-elif args.action[0] == 'stop-zk':
-    stop_zk_ensemble()
-elif args.action[0] == 'setup-solr':
-    hosts = setup_solr_instances(n_instances=3, install_new=True)
-elif args.action[0] == 'start-solr':
-    hosts = setup_solr_instances(n_instances=3, install_new=False)
-    run_solr_instances(hosts, zk_hosts='blah', n_shards=4)
-elif args.action[0] == 'run-demo':
-    num_shards = 3
-    n_instances = 3
-    hosts = get_hosts()
-    zk_hosts = hosts['zk_hosts']
-    solr_hosts = hosts['solr_hosts']
+num_shards = args.shards
+n_instances = args.instances
+
+### ZK and Solr hosts
+all_hosts = get_hosts() 
+solr_hosts = all_hosts['solr_hosts']
+zk_hosts = all_hosts['zk_hosts']
+
+
+if args.action == 'setup-zk':
     setup_zk_ensemble(zk_hosts)
+elif args.action == 'start-zk':
     start_zk_ensemble(zk_hosts)
-    # check_zk_running(zk_hosts)
+elif args.action == 'stop-zk':
+    stop_zk_ensemble()
+elif args.action == 'setup-solr':
+    solr_instances = setup_solr_instances(solr_hosts, n_instances=n_instances, 
+                                          install_new=True)
+elif args.action == 'start-solr':
     solr_hosts = setup_solr_instances(solr_hosts, n_instances, 
-                                      install_new=True)
+                                      install_new=False)
     run_solr_instances(solr_hosts, zk_hosts=zk_hosts, n_shards=num_shards)
-    subprocess.call(['sleep', '10'])
-elif args.action[0] == 'stop-solr':
+elif args.action == 'run-demo':
+    run_demo(num_shards=num_shards, n_instances=n_instances)
+elif args.action == 'stop-solr':
     stop_solr()
-elif args.action[0] == 'restart-solr':
-    restart_solr_instances()
-elif args.action[0] == 'index-samples':
-    hosts = get_hosts()
-    solr_hosts = hosts['solr_hosts']
+elif args.action == 'restart-solr':
+    restart_solr_instances(n_instances=n_instances, n_shards=num_shards)
+elif args.action == 'add-solr-instances':
+    # n_instance is the resultant, total number you want in the cluster
+    # including any instances already instantiated and started
+    add_solr_instances(n_instances, num_shards)
+elif args.action == 'index-samples':
     index_sample_documents(hosts=solr_hosts)
-elif args.action[0] == 'test-query':
+elif args.action == 'test-query':
     test_query()
 else:
     print '[ERROR] Unknown action \'' + args.action[0] + '\''
