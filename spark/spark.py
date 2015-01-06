@@ -21,6 +21,7 @@ import datetime
 import time
 import atexit
 import json
+import sys
 
 run_timestamp = time.time()
 
@@ -35,7 +36,7 @@ rundir = workdir + '/spark-' +  datetime.datetime.fromtimestamp(run_timestamp). 
 
 instance_json = rundir + '/spark.json'
 
-network_if = 'eth0'
+network_if = 'eth2'
 
 spark_version = '1.1.0'
 
@@ -47,6 +48,14 @@ spark_executor_memory = '32G'
 spark_url = 'http://d3kbcqa49mib13.cloudfront.net/spark-${VERSION}-bin-hadoop2.4.tgz'
 
 spark_home = outdir + '/spark-1.1.0-bin-hd2.3'
+
+# Workload specific
+workload_config = {}
+workload_config['WikipediaPageRank'] = { \
+	'args' : ['hdfs://10.10.49.98/user/maas/freebase-wex-2010-07-05-articles.tsv', '100', '256', 'true'], \
+	'class' : 'org.apache.spark.examples.bagel.WikipediaPageRank', \
+	'file' : spark_home + '/lib/spark-examples-1.1.0-hadoop2.3.0.jar' \
+	}
 
 print_vars = ['spark_version', 'spark_home', 'spark_master_port', 'network_if']
 
@@ -90,7 +99,8 @@ spark_instances = {}
 def shutdown_spark_instances():
 	print '> Shutting down Spark instances'
 	for c in spark_instances.values():
-		c['process'].terminate()
+		if c['process'].poll() == None:
+			c['process'].terminate()
 
 	print '> Waiting for processes to terminate...'
 	all_done = True
@@ -113,7 +123,12 @@ def do_start():
 
 	nodelist = get_slurm_nodelist()
 	master_node = nodelist[0]
-	worker_nodes = nodelist[1:]
+	worker_start_index = 1
+	if args.workload != 'none':
+		# Set one node aside to execute the workload, if requested.
+		job_node = nodelist[1]
+		worker_start_index = 2
+	worker_nodes = nodelist[worker_start_index:]
 
 	print '> Master Node: ' + master_node
 	print '> Worker Nodes: ' + ', '.join(worker_nodes)
@@ -206,26 +221,77 @@ def do_start():
 
 	print '> ALL WORKERS ARE UP!'
 
-	# Write a JSON description of the Cassandra instance that can be used by others.
-	print '> Writing instance description to ' + instance_json
-	#cassandra_instance = { \
-	#	'nodes' : ip_addresses.values(), \
-	#	'cli-path' : cassandra_home + '/bin/cassandra-cli', \
-	#}
+	spark_instance = { \
+		'master_ip' : ip_addresses[master_node], \
+		'master_port' : spark_master_port \
+	}
 
-	#json_str = json.dumps(cassandra_instance)
-	#with open(instance_json, 'w') as fjson:
-	#	fjson.write(json_str)	
+	if args.workload != 'none':
+		# If a workload is given, run the workload and shut down cluster afterwards.
+		job = run_workload(args.workload, spark_instance, job_node)
+		print '>'
+		print '> WAITING FOR WORKLOAD TO TERMINATE'
+		while True:
+			if (job.poll() != None):
+				sys.exit(0)
+			time.sleep(0.5)
+	else:
+		# Write a JSON description of the Cassandra instance that can be used by others.
+		print '> Writing instance description to ' + instance_json
 
-	print '>'
-	print '> ALL NODES ARE UP! TERMINATE THIS PROCESS TO SHUT DOWN SPARK CLUSTER.'
-	while True:
-		time.sleep(0.5)
+		json_str = json.dumps(spark_instance)
+		with open(instance_json, 'w') as fjson:
+			fjson.write(json_str)	
+
+		print '>'
+		print '> ALL NODES ARE UP! TERMINATE THIS PROCESS TO SHUT DOWN SPARK CLUSTER.'
+		while True:
+			time.sleep(0.5)
 
 # -------------------------------------------------------------------------------------------------
 
-parser = argparse.ArgumentParser(description='Run script for Cassandra on FireBox-0 cluster.')
+def run_workload(workload, spark_instance, node):
+	print '> Launching Spark workload ' + workload + '...'
+	if not (workload in workload_config.keys()):
+		print '[ERROR] No workload ' + workload
+		sys.exit(1)
+
+	print '>'
+	print '> Output redirected to ' + rundir
+	print '>'
+
+	print '> Launching Spark workload on ' + node
+
+	srun_cmd = ['srun', '--nodelist=' + node, '-N1']
+	srun_cmd += ['bash', './bin/spark-submit']
+	srun_cmd += ['--class', workload_config[workload]['class']]
+	srun_cmd += ['--master', 'spark://' + spark_instance['master_ip'] + ':' + spark_instance['master_port']]
+	srun_cmd += ['--executor-memory', '32G']
+	srun_cmd += ['--total-executor-cores', '16']
+	srun_cmd += [workload_config[workload]['file']]
+	srun_cmd += workload_config[workload]['args']
+
+	myenv = {}
+	myenv.update(os.environ)
+
+	myrundir = rundir + '/job-' + node
+	make_dir(myrundir)
+	myoutfile = myrundir + '/stdout'
+	myerrfile = myrundir + '/stderr'
+
+	fout = open(myoutfile, 'w')
+	ferr = open(myerrfile, 'w')
+	p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, env=myenv, cwd=spark_home)
+	spark_instances[node] = {'process': p, 'out': myoutfile, 'err': myerrfile, 'type': 'job'}
+	print '> Workload ' + workload + ' is running...'
+	return p
+
+# -------------------------------------------------------------------------------------------------
+
+parser = argparse.ArgumentParser(description='Run script for Spark on FireBox-0 cluster.')
 parser.add_argument('action', nargs=1, help='the action to perform (setup|start|stop)')
+parser.add_argument('--workload', nargs='?', metavar='WORKLOAD', default='none', \
+	help='if set, run the Spark workload described by WORKLOAD')
 
 args = parser.parse_args()
 
