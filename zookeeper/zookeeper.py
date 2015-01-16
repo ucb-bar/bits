@@ -58,6 +58,17 @@ def make_dir(mydir):
 
 # -------------------------------------------------------------------------------------------------
 
+def do_install():
+        print '> Installing Zookeeper libraries and includes'
+        print '>'
+
+        p = subprocess.Popen(['make','install'], cwd = zookeeper_c_lib_path)
+        p.wait()
+
+        print '> DONE'
+
+# -------------------------------------------------------------------------------------------------
+
 def do_setup():
 	print '> Setting up Zookeeper in directory ' + outdir
 	print '>'
@@ -221,6 +232,8 @@ if args.action[0] == 'setup':
 	do_setup()
 elif args.action[0] == 'start':
 	do_start()
+elif args.action[0] == 'install':
+	do_install()
 elif args.action[0] == 'stop':
         shutdown_zookeeper_instances()
 else:
