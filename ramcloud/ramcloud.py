@@ -23,7 +23,6 @@ import datetime
 import time
 import atexit
 import json
-from shutil import copyfile
 
 run_timestamp = time.time()
 
@@ -93,40 +92,22 @@ def do_setup():
                 p.wait()
 
                 print '> Updating RAMCloud modules..'
-                p = subprocess.Popen(['git', 'submodule', 'update', '--init', '--recursive'], cwd = ramcloud_dir)
+                p = subprocess.Popen(['git', 'submodule', 'update', \
+                        '--init', '--recursive'], cwd = ramcloud_dir)
                 p.wait()
-
-                print '> Setting environment variables..'
-#               if os.environ.get('ZOOKEEPER_LIB') == 'None':
-                os.environ['ZOOKEEPER_LIB'] = zookeeper_lib_path
-#if os.environ.get('ZOOKEEPER_DIR') == 'None':
-                os.environ['ZOOKEEPER_DIR'] = zookeeper_dir_path
 
                 print '> Compiling RAMCloud..'
-                # copy make script
-                copyfile('make.sh', ramcloud_dir + '/make.sh')
-                
-                subs_pattern =  '\'s/${USER}/' + getpass.getuser() + '/g\''
-                os.system("sed -i " + subs_pattern + " " + ramcloud_dir + '/make.sh')
+                cmd_str = 'make -j 16 DEBUG=no ZOOKEEPER_LIB=' + \
+                          zookeeper_lib_path + ' ZOOKEEPER_DIR=' + zookeeper_dir_path
+                print cmd_str
 
-                p = subprocess.Popen(['/bin/sh', 'make.sh'], cwd = ramcloud_dir)
+                p =  subprocess.Popen(cmd_str, cwd = ramcloud_dir, shell=True)
                 p.wait()
-
-#cmd_str = 'make -j 16 DEBUG=no ZOOKEEPER_LIB=' + zookeeper_lib_path + ' ZOOKEEPER_DIR=' + zookeeper_dir_path
-#cmd_list += ['ZOOKEEPER_LIB=' + zookeeper_lib_path, 'ZOOKEEPER_DIR=' + zookeeper_dir_path]
-                
-#     print ' '.join(cmd_list)
-#print cmd_str
-
-#p =  subprocess.Popen('echo $ZOOKEEPER_LIB', cwd = ramcloud_dir, shell=True)
-#                p =  subprocess.Popen('echo $ZOOKEEPER_DIR', cwd = ramcloud_dir, shell=True)
-#                p.wait()
-#                p =  subprocess.Popen(cmd_str, cwd = ramcloud_dir, shell=True)
-#                p.wait()
 
                 print '> DONE'
 	else:
-                print '> RAMCloud was already setup. To perform setup again please remove folder'
+                print '> RAMCloud was already setup. To perform setup' + \
+                        'again please remove folder'
 	print '>'
 	print '> DONE'
 	print '>'
