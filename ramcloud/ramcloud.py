@@ -6,6 +6,8 @@
 # setup: Download and install RAMCloud into a shared directory.
 # start: Start a RAMCloud cluster.
 # stop: Stop the RAMCloud cluster.
+#
+# Assumes zookeeper has been deployed
 
 # Contributors:
 # Joao Carreira <joao@eecs.berkeley.edu> (2014)
@@ -21,38 +23,39 @@ import datetime
 import time
 import atexit
 import json
+from shutil import copyfile
 
 run_timestamp = time.time()
 
 # -------------------------------------------------------------------------------------------------
 
-version = '0.1'
+version = '1.0'
 
-outdir = '/nscratch/' + getpass.getuser() + '/ramcloud'
+user_dir = '/nscratch/' + getpass.getuser()
+outdir = user_dir + '/ramcloud_bits'
 workdir = os.getcwd() + '/work'
 rundir = workdir + '/ramcloud-' +  datetime.datetime.fromtimestamp(run_timestamp). \
 	strftime('%Y-%m-%d-%H-%M-%S')
 
-# what is this?
-instance_json = rundir + '/ramcloud.json'
-
 network_if = 'eth0'
 
-ramcloud_version = '1'
+ramcloud_url = 'git://fiz.stanford.edu/git/ramcloud.git'
 
-
-# For now, use the Hadoop-2.4 version (as this is what the cluster is running).
-ramcloud_url = 'XXX'
-
-#spark_home = outdir + '/spark-1.1.0-bin-hd2.3'
-
-#print_vars = ['spark_version', 'spark_home', 'spark_master_port', 'network_if']
+# paths used to set zookeeper dependencies
+# XXX zookeeper version should be parameter
+zookeeper_lib_path = user_dir +\
+                     '/zookeeper_bits/zookeeper-3.4.6/src/c/.libs/libzookeeper_mt.a'
+zookeeper_dir_path = user_dir + \
+                     '/zookeeper_bits/zookeeper-3.4.6/src/c/include'
 
 # -------------------------------------------------------------------------------------------------
 
 def make_dir(mydir):
 	if not os.path.exists(mydir):
+                print "Creating " + mydir
     		os.makedirs(mydir)
+        else:
+                print "Directory " + mydir + " already exists"
 
 # Return the list of nodes in the current SLURM allocation
 def get_slurm_nodelist():
@@ -78,23 +81,52 @@ def get_ip_addresses(nodelist):
 
 def do_setup():
 	print '> Setting up RAMCloud in directory ' + outdir
-	#print '> Working directory: ' + workdir
 	print '>'
 
-        ramcloud_dir = 'ramcloud'
-	#download_path = workdir + '/downloads/'
-	if not os.path.exists(outdir + '/ramcloud'):
+        ramcloud_dir = outdir + '/ramcloud'
+
+	if not os.path.exists(ramcloud_dir):
+                make_dir(ramcloud_dir)        
                 print '> Entering directory: ' + outdir
-                os.chdir(outdir)
                 print '> Cloning RAMCloud..'
-                subprocess.call(['git', 'clone', 'git://fiz.stanford.edu/git/ramcloud.git'])
-                os.chdir(ramcloud_dir)
+                p = subprocess.Popen(['git', 'clone', ramcloud_url], cwd = outdir)
+                p.wait()
+
                 print '> Updating RAMCloud modules..'
-                subprocess.call(['git', 'submodule', 'update', '--init', '--recursive'])
-                os.chdir('..')
+                p = subprocess.Popen(['git', 'submodule', 'update', '--init', '--recursive'], cwd = ramcloud_dir)
+                p.wait()
+
+                print '> Setting environment variables..'
+#               if os.environ.get('ZOOKEEPER_LIB') == 'None':
+                os.environ['ZOOKEEPER_LIB'] = zookeeper_lib_path
+#if os.environ.get('ZOOKEEPER_DIR') == 'None':
+                os.environ['ZOOKEEPER_DIR'] = zookeeper_dir_path
+
+                print '> Compiling RAMCloud..'
+                # copy make script
+                copyfile('make.sh', ramcloud_dir + '/make.sh')
+                
+                subs_pattern =  '\'s/${USER}/' + getpass.getuser() + '/g\''
+                os.system("sed -i " + subs_pattern + " " + ramcloud_dir + '/make.sh')
+
+                p = subprocess.Popen(['/bin/sh', 'make.sh'], cwd = ramcloud_dir)
+                p.wait()
+
+#cmd_str = 'make -j 16 DEBUG=no ZOOKEEPER_LIB=' + zookeeper_lib_path + ' ZOOKEEPER_DIR=' + zookeeper_dir_path
+#cmd_list += ['ZOOKEEPER_LIB=' + zookeeper_lib_path, 'ZOOKEEPER_DIR=' + zookeeper_dir_path]
+                
+#     print ' '.join(cmd_list)
+#print cmd_str
+
+#p =  subprocess.Popen('echo $ZOOKEEPER_LIB', cwd = ramcloud_dir, shell=True)
+#                p =  subprocess.Popen('echo $ZOOKEEPER_DIR', cwd = ramcloud_dir, shell=True)
+#                p.wait()
+#                p =  subprocess.Popen(cmd_str, cwd = ramcloud_dir, shell=True)
+#                p.wait()
+
                 print '> DONE'
 	else:
-                print '> Use previously downloaded RAMCloud package at ' + 'git://fiz.stanford.edu/git/ramcloud.git'
+                print '> RAMCloud was already setup. To perform setup again please remove folder'
 	print '>'
 	print '> DONE'
 	print '>'
@@ -103,8 +135,14 @@ def do_setup():
 
 ramcloud_instances = {}
 
-def shutdown_spark_instances():
-	print '> Shutting down Spark instances'
+def check_slurm_allocation():
+        if (not 'SLURM_NODELIST' in os.environ) or (not os.environ['SLURM_NODELIST']):
+            print '[ERROR] Need to run script within SLURM allocation'
+            exit(1)
+
+
+def shutdown_ramcloud_instances():
+	print '> Shutting down RAMCloud instances'
 	for c in spark_instances.values():
 		c['process'].terminate()
 
@@ -139,28 +177,6 @@ def do_start():
 	ip_addresses = get_ip_addresses(nodelist)
 	print '> IPs: ' + ', '.join(ip_addresses.values())
 	print '>'
-
-	# Step I: Launch Spark Master
-	print '> Launching Spark master on node: ' + master_node
-
-	srun_cmd = ['srun', '--nodelist=' + master_node, '-N1']
-	srun_cmd += ['bin/spark-class']
-	srun_cmd += ['org.apache.spark.deploy.master.Master']
-	srun_cmd += ['--ip', ip_addresses[master_node]]
-	srun_cmd += ['--port', spark_master_port]
-
-	myenv = {} #{'CASSANDRA_HOME': cassandra_home, 'CASSANDRA_CONF': myconfdir}
-	myenv.update(os.environ)
-
-	myrundir = rundir + '/master-' + master_node
-	make_dir(myrundir)
-	myoutfile = myrundir + '/stdout'
-	myerrfile = myrundir + '/stderr'
-
-	fout = open(myoutfile, 'w')
-	ferr = open(myerrfile, 'w')
-	p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, env=myenv, cwd=spark_home)
-	spark_instances[master_node] = {'process': p, 'out': myoutfile, 'err': myerrfile, 'type': 'master'}
 
 	# When exiting, make sure all children are terminated cleanly
 	atexit.register(shutdown_spark_instances)
@@ -254,21 +270,14 @@ git_rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
 print '> GIT revision: ' + git_rev.replace('\n','')
 print '>'
 
-print '> Constants:'
-for v in print_vars:
-	print '> ' + v + '=' + globals()[v]
-
 print '>'
-
-if (not 'SLURM_NODELIST' in os.environ) or (not os.environ['SLURM_NODELIST']):
-	print '[ERROR] Need to run script within SLURM allocation'
-	exit(1)
 
 print '> COMMAND = ' + str(args.action)
 
 if args.action[0] == 'setup':
 	do_setup()
 elif args.action[0] == 'start':
+        check_slurm_allocation()
 	do_start()
 else:
 	print '[ERROR] Unknown action \'' + args.action[0] + '\''
