@@ -35,6 +35,7 @@ outdir = '/nscratch/' + getpass.getuser() + '/zookeeper_bits'
 download_path = outdir + '/' + zookeeper_filename + '.tar'
 download_url = zookeeper_url.replace('${VERSION}', zookeeper_version)
 zookeeper_path = outdir + '/' + zookeeper_filename
+zookeeper_c_lib_path = zookeeper_path + '/src/c' 
 
 workdir = os.getcwd() + '/work'
 
@@ -43,6 +44,8 @@ rundir = workdir + '/zookeeper-' +  datetime.datetime.fromtimestamp(run_timestam
 
 network_if = 'eth0'
 
+# XXX number of nodes and specific nodes should be
+# in config file or input parameters
 zookeeper_num_nodes = 3
 zookeeper_nodes = ['16','15','14']
 nodes_hash = {} # {'16' : '1', '15' : '2', '14' : '3'}
@@ -93,6 +96,13 @@ def do_setup():
                 print '> Compiling Zookeeper in dir: ' + zookeeper_path + '..'
                 p = subprocess.Popen(['ant', 'bin-package'], cwd = zookeeper_path)
                 p.wait()
+               
+                print '> Compiling Zookeeper libraries (used by RAMCloud) ' \
+                      'in dir: ' + zookeeper_c_lib_path
+                p = subprocess.Popen(['./configure'], cwd = zookeeper_c_lib_path)
+                p.wait()
+                p = subprocess.Popen(['make','-j','10'], cwd = zookeeper_c_lib_path)
+                p.wait()
 
                 # Zookeeper compiled
                 # copy configuration to the deployed zookeeper
@@ -104,19 +114,19 @@ def do_setup():
         make_dir(conf_dir)
 
         print "Copying configuration files.."
-        for i in xrange(1,zookeeper_num_nodes + 1):
-                filename = 'zookeeper' + str(i) + '.cfg'
+        for node in zookeeper_nodes:
+                filename = 'zookeeper' + nodes_hash[node] + '.cfg'
                 destination_filename = conf_dir + '/' + filename
 
                 copyfile('conf/zookeeper1.cfg', destination_filename)
 
                 subs_pattern1 =  '\'s/${USER}/' + getpass.getuser() + '/\''
-                subs_pattern2 =  '\'s/${NODE_ID}/' + str(i) + '/\''
+                subs_pattern2 =  '\'s/${NODE_ID}/' + nodes_hash[node] + '/\''
                 os.system("sed -i " + subs_pattern1 + " " + destination_filename)
                 os.system("sed -i " + subs_pattern2 + " " + destination_filename)
 
-        print "Creating zookeeper instances dirs in " + outdir_data
-        for node in zookeeper_nodes
+        print "Creating zookeeper conf instances in " + outdir_data
+        for node in zookeeper_nodes:
                 instance_data_dir = outdir_data + '/' + 'zookeeper' + nodes_hash[node]
                 make_dir(instance_data_dir)
                 fo = open(instance_data_dir + '/myid', "w")
@@ -157,7 +167,8 @@ def shutdown_zookeeper_instances():
 
 		srun_cmd = ['ssh', 'f' + node]
 		srun_cmd += [zookeeper_path + '/bin/zkServer.sh', 'stop']
-		srun_cmd += [zookeeper_path + '/../conf/zookeeper' + nodes_hash[node] + '.cfg']
+		srun_cmd += [zookeeper_path + '/../conf/zookeeper' + \
+                            nodes_hash[node] + '.cfg']
 
 		p = subprocess.Popen(srun_cmd)
                 p.wait()
@@ -179,9 +190,6 @@ def do_start():
 	print '> Master/Worker Nodes: ' + ', '.join(zookeeper_nodes)
 	print '>'
 
-	# When exiting, make sure all children are terminated cleanly
-	atexit.register(shutdown_zookeeper_instances)
-
 	# Launch Zookeeper Workers
 	print '> Launching Zookeeper nodes'
 	print '>'
@@ -202,6 +210,9 @@ def do_start():
 		ferr = open(myerrfile, 'w')
 		p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr)
 		zookeeper_instances[node] = {'process': p, 'out': myoutfile, 'err': myerrfile, 'node': node}
+	
+        # When exiting, make sure all children are terminated cleanly
+	atexit.register(shutdown_zookeeper_instances)
 
 	print '>'
 	print '> ALL NODES ARE UP! TERMINATE THIS PROCESS TO SHUT DOWN ZOOKEEPER CLUSTER.'
