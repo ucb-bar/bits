@@ -194,22 +194,29 @@ def do_start():
 	print '> Launching Zookeeper nodes'
 	print '>'
 
+        # Create symlink for latest run
+        subprocess.call(['ln', '-s', '-f', '-T', rundir, workdir + '/latest'])
+
 	for node in zookeeper_nodes:
 		print '> Launching Zookeeper on ' + node
 
 		srun_cmd = ['ssh', 'f' + node]
 		srun_cmd += [zookeeper_path + '/bin/zkServer.sh', 'start']
-		srun_cmd += [zookeeper_path + '/../conf/zookeeper' + str(nodes_hash[node]) + '.cfg']
+		srun_cmd += [zookeeper_path + '/../conf/zookeeper' + \
+                            str(nodes_hash[node]) + '.cfg']
 
 		myrundir = rundir + '/worker-' + node
 		make_dir(myrundir)
+
+
 		myoutfile = myrundir + '/stdout'
 		myerrfile = myrundir + '/stderr'
 
 		fout = open(myoutfile, 'w')
 		ferr = open(myerrfile, 'w')
 		p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr)
-		zookeeper_instances[node] = {'process': p, 'out': myoutfile, 'err': myerrfile, 'node': node}
+		zookeeper_instances[node] = {'process': p, 'out': myoutfile, \
+                    'err': myerrfile, 'node': node}
 	
         # When exiting, make sure all children are terminated cleanly
 	atexit.register(shutdown_zookeeper_instances)
