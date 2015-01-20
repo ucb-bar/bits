@@ -32,6 +32,7 @@ version = '1.0'
 
 user_dir = '/nscratch/' + getpass.getuser()
 outdir = user_dir + '/ramcloud_bits'
+ramcloud_dir = outdir + '/ramcloud'
 workdir = os.getcwd() + '/work'
 rundir = workdir + '/ramcloud-' +  datetime.datetime.fromtimestamp(run_timestamp). \
 	strftime('%Y-%m-%d-%H-%M-%S')
@@ -64,25 +65,11 @@ def get_slurm_nodelist():
 	nodelist = nodelist.strip().split('\n')
 	return nodelist
 
-# Return list of the Ip addresses for the chosen network_if on all nodes in nodelist
-def get_ip_addresses(nodelist):
-	results = subprocess.check_output( \
-		['srun', '--nodelist=' + ','.join(nodelist), 'bash', '../common/get_ip_address.sh', \
-		network_if], universal_newlines=True)
-	json_str = '[' + ','.join(results.splitlines()) + ']'
-	raw_data = json.loads(json_str)
-	ip_map = {}
-	for entry in raw_data:
-		ip_map[entry['host']] = entry['ip']
-	return ip_map
-
 # -------------------------------------------------------------------------------------------------
 
 def do_setup():
 	print '> Setting up RAMCloud in directory ' + outdir
 	print '>'
-
-        ramcloud_dir = outdir + '/ramcloud'
 
 	if not os.path.exists(ramcloud_dir):
                 make_dir(ramcloud_dir)        
@@ -124,18 +111,73 @@ def check_slurm_allocation():
 
 def shutdown_ramcloud_instances():
 	print '> Shutting down RAMCloud instances'
-	for c in spark_instances.values():
+	for c in ramcloud_instances.values():
+                print "Terminating node " + c['node_id']
 		c['process'].terminate()
 
 	print '> Waiting for processes to terminate...'
 	all_done = True
 	while not all_done:
 		all_done = True
-		for c in spark_instances.values():
+		for c in ramcloud_instances.values():
 			if (c['process'].poll() == None):
 				all_done = False
 		time.sleep(0.01)
 	print '> DONE'	
+
+def wait_for_coordinator(coordinator_log):
+	print '>'
+	print '> Waiting for Coordinator to finish starting up...'
+	while True:
+                try:
+		        with open(coordinator_log, 'r') as fout:
+		    	        outdata = fout.read()	
+		        if re.search('ZooKeeper connection opened', outdata) != None:
+			        break
+                except:
+                        print 'Error opening Coordinator log file'
+		time.sleep(0.1)
+	print '> COORDINATOR IS UP!'
+	print '>'
+
+# note: ulimit -l unlimited must be added to
+# /etc/init.d/slurm-lln
+# to avoid ramcloud complaining about limitations on the locked memory
+def get_ramcloud_coordinator_cmd(coordinator_node, coordinator_log):
+        srun_cmd = ['srun', '--nodelist=' + coordinator_node, '-N1']
+        srun_cmd += ['obj.master/coordinator']
+        srun_cmd += ['-C', 'infrc:host='+coordinator_node+',port=11100']
+        srun_cmd += ['-x', 'zk:f16:2181'] #XXX make Zookeeper node a parameter
+        srun_cmd += ['--logFile', coordinator_log]
+        return srun_cmd
+
+def get_ramcloud_server_cmd(node, coordinator_node):
+	srun_cmd = ['srun', '--nodelist=' + node, '-N1']
+        srun_cmd += ['obj.master/server', '-L', 'infrc:host='+node+',port=11100']
+        srun_cmd += ['zk:f16:2181'] #XXX make Zookeeper node a parameter
+        srun_cmd += ['-C', 'infrc:host='+coordinator_node+',port=11100']
+        srun_cmd += ['--totalMasterMemory', '16000']
+        srun_cmd += ['-f', '/tmp/ramcloud_data']
+        srun_cmd += ['--segmentFrames', '10000','-r','2']
+        return srun_cmd
+
+def wait_for_ramcloud_servers(worker_nodes):
+	print '>'
+	print '> Waiting for all Servers to finish starting up...'
+	unfinished_nodes = worker_nodes
+
+	while unfinished_nodes:
+		done_nodes = []
+		for node in unfinished_nodes:
+			with open(ramcloud_instances[node]['err'], 'r') as fout:
+				outdata = fout.read()	
+			if re.search("Opened session with coordinator", outdata) != None:
+				done_nodes.append(node)
+		for node in done_nodes:
+			unfinished_nodes.remove(node)
+		time.sleep(0.01)
+
+	print '> ALL SERVERS ARE UP!'
 
 def do_start():
 	print '> Launching RAMCloud cluster...'
@@ -147,91 +189,63 @@ def do_start():
 	subprocess.call(['ln', '-s', '-f', '-T', rundir, workdir + '/latest'])
 
 	nodelist = get_slurm_nodelist()
-	master_node = nodelist[0]
+	coordinator_node = nodelist[0]
 	worker_nodes = nodelist[1:]
 
-	print '> Master Node: ' + master_node
+	print '> Coordinator Node: ' + coordinator_node
 	print '> Worker Nodes: ' + ', '.join(worker_nodes)
 	print '>'
+	
+        # Step I: Launch RAMCloud coordinator
+	print '> Launching RAMCloud coordinator on node: ' + coordinator_node
 
-	print '> Getting IP addresses for network interface ' + network_if + '...'
-	ip_addresses = get_ip_addresses(nodelist)
-	print '> IPs: ' + ', '.join(ip_addresses.values())
-	print '>'
+        myrundir = rundir + '/coordinator-' + coordinator_node
+        make_dir(myrundir)
+        myoutfile = myrundir + '/stdout'
+        myerrfile = myrundir + '/stderr'
+        coordinator_log = myrundir + '/coordinator_log'
+
+        fout = open(myoutfile, 'w') 
+        ferr = open(myerrfile, 'w') 
+
+        srun_cmd = get_ramcloud_coordinator_cmd(coordinator_node, coordinator_log)
+
+        print "Launching coordinator.."
+        print ' '.join(srun_cmd)
+        p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, cwd=ramcloud_dir)
+        ramcloud_instances[coordinator_node] = {'process': p, 'out': myoutfile, \
+                    'err': myerrfile, 'type': 'coordinator', 'node_id' : coordinator_node}
 
 	# When exiting, make sure all children are terminated cleanly
-	atexit.register(shutdown_spark_instances)
+	atexit.register(shutdown_ramcloud_instances)
 
-	print '>'
-	print '> Waiting for Master to finish starting up...'
-	while True:
-		with open(myerrfile, 'r') as fout:
-			outdata = fout.read()	
-		if re.search('Successfully started service \'sparkMaster\'', outdata) != None:
-			break
-		time.sleep(0.01)
-	print '> MASTER IS UP!'
-	print '>'
+        wait_for_coordinator(coordinator_log)
 
-	# Step II: Launch Spark Workers
-	print '> Launching Spark worker nodes'
+	# Step II: Launch RAMCloud servers
+	print '> Launching RAMCloud server nodes'
 	print '>'
 
 	for node in worker_nodes:
-		print '> Launching Spark worker on ' + node
+		print '> Launching RAMCloud server on ' + node
 
-		srun_cmd = ['srun', '--nodelist=' + node, '-N1']
-		srun_cmd += ['bash', './bin/spark-class']
-		srun_cmd += ['org.apache.spark.deploy.worker.Worker']
-		srun_cmd += ['--ip', ip_addresses[node]]
-		srun_cmd += ['spark://' + ip_addresses[master_node] + ':' + spark_master_port]
+                srun_cmd = get_ramcloud_server_cmd(node, coordinator_node)
 
-		#myenv = {'CASSANDRA_HOME': cassandra_home, 'CASSANDRA_CONF': myconfdir}
-		myenv.update(os.environ)
-
-		myrundir = rundir + '/worker-' + node
+		myrundir = rundir + '/server-' + node
 		make_dir(myrundir)
 		myoutfile = myrundir + '/stdout'
 		myerrfile = myrundir + '/stderr'
 
 		fout = open(myoutfile, 'w')
 		ferr = open(myerrfile, 'w')
-		p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, env=myenv, cwd=spark_home)
-		spark_instances[node] = {'process': p, 'out': myoutfile, 'err': myerrfile, 'type': 'worker'}
+		p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, cwd=ramcloud_dir)
+		ramcloud_instances[node] = {'process': p, 'out': myoutfile, \
+                    'err': myerrfile, 'type': 'worker', 'node_id' : node}
 
-	# When exiting, make sure all children are terminated cleanly
-	atexit.register(shutdown_spark_instances)
 
-	print '>'
-	print '> Waiting for all Workers to finish starting up...'
-	unfinished_nodes = worker_nodes
-
-	while unfinished_nodes:
-		done_nodes = []
-		for node in unfinished_nodes:
-			with open(spark_instances[node]['err'], 'r') as fout:
-				outdata = fout.read()	
-			if re.search("Successfully registered with master", outdata) != None:
-				done_nodes.append(node)
-		for node in done_nodes:
-			unfinished_nodes.remove(node)
-		time.sleep(0.01)
-
-	print '> ALL WORKERS ARE UP!'
-
-	# Write a JSON description of the Cassandra instance that can be used by others.
-	print '> Writing instance description to ' + instance_json
-	#cassandra_instance = { \
-	#	'nodes' : ip_addresses.values(), \
-	#	'cli-path' : cassandra_home + '/bin/cassandra-cli', \
-	#}
-
-	#json_str = json.dumps(cassandra_instance)
-	#with open(instance_json, 'w') as fjson:
-	#	fjson.write(json_str)	
+        wait_for_ramcloud_servers(worker_nodes)
 
 	print '>'
-	print '> ALL NODES ARE UP! TERMINATE THIS PROCESS TO SHUT DOWN SPARK CLUSTER.'
+	print '> ALL NODES ARE UP! TERMINATE THIS PROCESS TO SHUT DOWN RAMCLOUD CLUSTER.'
 	while True:
 		time.sleep(0.5)
 
@@ -260,5 +274,7 @@ if args.action[0] == 'setup':
 elif args.action[0] == 'start':
         check_slurm_allocation()
 	do_start()
+elif args.action[0] == 'stop':
+	shutdown_ramcloud_instances()
 else:
 	print '[ERROR] Unknown action \'' + args.action[0] + '\''
