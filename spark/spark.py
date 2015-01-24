@@ -48,6 +48,7 @@ spark_executor_memory = '32G'
 spark_url = 'http://d3kbcqa49mib13.cloudfront.net/spark-${VERSION}-bin-hadoop2.4.tgz'
 
 spark_home = outdir + '/spark-1.1.0-bin-hd2.3'
+spark_work = spark_home + '/work'
 
 # Workload specific
 workload_config = {}
@@ -56,8 +57,15 @@ workload_config['WikipediaPageRank'] = { \
 	'class' : 'org.apache.spark.examples.bagel.WikipediaPageRank', \
 	'file' : spark_home + '/lib/spark-examples-1.1.0-hadoop2.3.0.jar' \
 	}
+workload_config['SparkPi'] = { \
+	'args' : ['10'], \
+	'class' : 'org.apache.spark.examples.SparkPi', \
+	'file' : spark_home + '/lib/spark-examples-1.1.0-hadoop2.3.0.jar' \
+	}
 
-print_vars = ['spark_version', 'spark_home', 'spark_master_port', 'network_if']
+java_opts = '-XX:+PrintGC -XX:+PrintGCDetails -XX:+PrintGCTimeStamps'
+
+print_vars = ['spark_version', 'spark_home', 'spark_master_port', 'network_if', 'java_opts']
 
 # -------------------------------------------------------------------------------------------------
 
@@ -148,7 +156,7 @@ def do_start():
 	srun_cmd += ['--ip', ip_addresses[master_node]]
 	srun_cmd += ['--port', spark_master_port]
 
-	myenv = {} #{'CASSANDRA_HOME': cassandra_home, 'CASSANDRA_CONF': myconfdir}
+	myenv = {'SPARK_JAVA_OPTS': java_opts, 'SPARK_DAEMON_JAVA_OPTS': java_opts}
 	myenv.update(os.environ)
 
 	myrundir = rundir + '/master-' + master_node
@@ -188,7 +196,7 @@ def do_start():
 		srun_cmd += ['--ip', ip_addresses[node]]
 		srun_cmd += ['spark://' + ip_addresses[master_node] + ':' + spark_master_port]
 
-		#myenv = {'CASSANDRA_HOME': cassandra_home, 'CASSANDRA_CONF': myconfdir}
+		myenv = {'SPARK_JAVA_OPTS': java_opts, 'SPARK_DAEMON_JAVA_OPTS': java_opts}
 		myenv.update(os.environ)
 
 		myrundir = rundir + '/worker-' + node
@@ -233,6 +241,8 @@ def do_start():
 		print '> WAITING FOR WORKLOAD TO TERMINATE'
 		while True:
 			if (job.poll() != None):
+				if args.logs:
+					extract_spark_logs(rundir + '/master-' + master_node + '/stderr')
 				sys.exit(0)
 			time.sleep(0.5)
 	else:
@@ -272,6 +282,7 @@ def run_workload(workload, spark_instance, node):
 	srun_cmd += workload_config[workload]['args']
 
 	myenv = {}
+	myenv = {'SPARK_JAVA_OPTS': java_opts, 'SPARK_DAEMON_JAVA_OPTS': java_opts}
 	myenv.update(os.environ)
 
 	myrundir = rundir + '/job-' + node
@@ -286,12 +297,29 @@ def run_workload(workload, spark_instance, node):
 	print '> Workload ' + workload + ' is running...'
 	return p
 
+def extract_spark_logs(master_err):
+	with open(master_err, 'r') as fmaster:
+		log = fmaster.read()
+
+	m = re.search('Registered app .+ with ID ([a-zA-Z0-9\-]+)', log)
+	app = m.group(1)
+
+	source_dir = spark_work + '/' + app
+	dest_dir = rundir + '/spark_logs'
+
+	print '> Copying spark logs from ' + source_dir + ' to ' + dest_dir + '...'
+	shutil.copytree(source_dir, dest_dir, ignore=shutil.ignore_patterns('*.jar'))
+	print '> Finished copying!'
+	print '>'
+
 # -------------------------------------------------------------------------------------------------
 
 parser = argparse.ArgumentParser(description='Run script for Spark on FireBox-0 cluster.')
 parser.add_argument('action', nargs=1, help='the action to perform (setup|start|stop)')
-parser.add_argument('--workload', nargs='?', metavar='WORKLOAD', default='none', \
-	help='if set, run the Spark workload described by WORKLOAD')
+parser.add_argument('--workload', nargs='?', metavar='NAME', default='none', \
+	help='if set, run the Spark workload described by NAME')
+parser.add_argument('--logs', action='store_true', default=False, \
+	help='copy the Spark executor logs into work directory')
 
 args = parser.parse_args()
 
@@ -315,6 +343,8 @@ if (not 'SLURM_NODELIST' in os.environ) or (not os.environ['SLURM_NODELIST']):
 	exit(1)
 
 print '> COMMAND = ' + str(args.action)
+print '> COPY SPARK LOGS = ' + str(args.logs)
+print '>'
 
 if args.action[0] == 'setup':
 	do_setup()
