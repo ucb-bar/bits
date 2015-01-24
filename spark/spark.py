@@ -29,6 +29,8 @@ run_timestamp = time.time()
 
 version = '0.1'
 
+srcdir = os.path.abspath(os.path.dirname(__file__))
+
 outdir = '/nscratch/' + getpass.getuser() + '/spark'
 workdir = os.getcwd() + '/work'
 rundir = workdir + '/spark-' +  datetime.datetime.fromtimestamp(run_timestamp). \
@@ -67,6 +69,8 @@ java_opts = '-XX:+PrintGC -XX:+PrintGCDetails -XX:+PrintGCTimeStamps'
 
 print_vars = ['spark_version', 'spark_home', 'spark_master_port', 'network_if', 'java_opts']
 
+cluster_info = {}
+
 # -------------------------------------------------------------------------------------------------
 
 def make_dir(mydir):
@@ -84,7 +88,7 @@ def get_slurm_nodelist():
 # Return list of the Ip addresses for the chosen network_if on all nodes in nodelist
 def get_ip_addresses(nodelist):
 	results = subprocess.check_output( \
-		['srun', '--nodelist=' + ','.join(nodelist), 'bash', '../common/get_ip_address.sh', \
+		['srun', '--nodelist=' + ','.join(nodelist), 'bash', srcdir + '/../common/get_ip_address.sh', \
 		network_if], universal_newlines=True)
 	json_str = '[' + ','.join(results.splitlines()) + ']'
 	raw_data = json.loads(json_str)
@@ -127,6 +131,7 @@ def do_start():
 	print '>'
 
 	# Create symlink for latest run
+	make_dir(workdir)
 	subprocess.call(['ln', '-s', '-f', '-T', rundir, workdir + '/latest'])
 
 	nodelist = get_slurm_nodelist()
@@ -183,9 +188,14 @@ def do_start():
 	print '> MASTER IS UP!'
 	print '>'
 
+	cluster_info['master_ip'] = ip_addresses[master_node]
+	cluster_info['master_port'] = spark_master_port
+
 	# Step II: Launch Spark Workers
 	print '> Launching Spark worker nodes'
 	print '>'
+
+	cluster_info['workers'] = []
 
 	for node in worker_nodes:
 		print '> Launching Spark worker on ' + node
@@ -208,6 +218,8 @@ def do_start():
 		ferr = open(myerrfile, 'w')
 		p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, env=myenv, cwd=spark_home)
 		spark_instances[node] = {'process': p, 'out': myoutfile, 'err': myerrfile, 'type': 'worker'}
+
+		cluster_info['workers'].append({'ip': ip_addresses[node], 'node': node})
 
 	# When exiting, make sure all children are terminated cleanly
 	atexit.register(shutdown_spark_instances)
@@ -295,6 +307,10 @@ def run_workload(workload, spark_instance, node):
 	p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, env=myenv, cwd=spark_home)
 	spark_instances[node] = {'process': p, 'out': myoutfile, 'err': myerrfile, 'type': 'job'}
 	print '> Workload ' + workload + ' is running...'
+
+	if (hooks.start_workload):
+		hooks.start_workload()
+
 	return p
 
 def extract_spark_logs(master_err):
@@ -320,6 +336,8 @@ parser.add_argument('--workload', nargs='?', metavar='NAME', default='none', \
 	help='if set, run the Spark workload described by NAME')
 parser.add_argument('--logs', action='store_true', default=False, \
 	help='copy the Spark executor logs into work directory')
+parser.add_argument('--hooks', nargs='?', metavar='FILE', default='none', \
+	help='if set, defines a Python file with custom hooks to call')
 
 args = parser.parse_args()
 
@@ -344,6 +362,15 @@ if (not 'SLURM_NODELIST' in os.environ) or (not os.environ['SLURM_NODELIST']):
 
 print '> COMMAND = ' + str(args.action)
 print '> COPY SPARK LOGS = ' + str(args.logs)
+
+if args.hooks:
+	print '> CUSTOM HOOKS FILE = ' + args.hooks
+	execfile(args.hooks)
+	hooks = Hooks(cluster_info)
+
+	if hooks.start_workload:
+		print '> - FOUND HOOK: start_workload'
+	
 print '>'
 
 if args.action[0] == 'setup':
