@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 # Usage of HERD.py script:
-# Need to run within a salloc allocation.
 # 
 # Commands in order:
 # setup: Download and install HERD into a shared directory
@@ -37,8 +36,6 @@ workdir = os.getcwd() + '/work'
 rundir = workdir + '/HERD-' +  datetime.datetime.fromtimestamp(run_timestamp). \
 	strftime('%Y-%m-%d-%H-%M-%S')
 
-network_if = 'eth0'
-
 herd_url = 'git@github.com:jcarreira/HERD.git'
 
 # -------------------------------------------------------------------------------------------------
@@ -70,6 +67,8 @@ def do_setup():
                 p =  subprocess.Popen(cmd_str, cwd = herd_dir, shell=True)
                 p.wait()
 
+                # We need to change some permissions
+                # We will need to run as root later
                 p = subprocess.call(['chmod', 'a+rwx', outdir])
                 p = subprocess.call(['chmod', 'a+rwx', herd_dir])
                 p = subprocess.call(['chmod', 'a+rwx', herd_dir + '/main'])
@@ -118,10 +117,8 @@ def do_start():
         p = subprocess.Popen(['sudo', '/bin/sh', 'run-servers.sh'], stdout=fout, stderr=ferr, cwd=herd_dir, env = {'ROCE':'1'})
         p.wait()
 
-	# When exiting, make sure all children are terminated cleanly
-
 	print '>'
-	print '> ALL NODES ARE UP! TERMINATE THIS PROCESS TO SHUT DOWN HERD TEST.'
+	print '> TEST IS RUNNING! CHECK OUTPUT IN THE WORK FOLDER. TERMINATE THIS PROCESS TO SHUT DOWN THE TEST.'
 	while True:
 		time.sleep(0.5)
 
