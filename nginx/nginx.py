@@ -106,7 +106,7 @@ def do_setup():
                 p.wait()
 
                 # Change port used by nginx (80 requires root)
-                subs_pattern = 's/listen.*80;/listen ' + ab_port + ';/'
+                subs_pattern = 's/listen.*80;/listen ' + str(ab_port) + ';/'
                 p =  subprocess.Popen(['sed', '-si', subs_pattern, nginx_work_dir +
                         '/conf/nginx.conf'], cwd = nginx_dir)
                 p.wait()
@@ -144,7 +144,7 @@ def do_start():
         fout = open(myoutfile, 'w') 
         ferr = open(myerrfile, 'w') 
 
-        srun_cmd = ['srun', '--nodelist=' + node, '-N1']
+        srun_cmd = ['srun', '--nodelist=' + nginx_node, '-N1']
         srun_cmd += ['./objs/nginx']
 
         p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, cwd=nginx_dir)
