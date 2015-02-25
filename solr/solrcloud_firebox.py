@@ -106,7 +106,6 @@ def setup_zk_ensemble(hosts):
         subprocess.call(srun_cmd + srun_cmd2)
 
 def start_zk_ensemble(zk_hosts):
-    DNULL
     for h in zk_hosts:
         print 'Starting Zookeeper host on {}'.format(h)
         srun_cmd = ['srun', '--nodelist=' + h, '-N1']  # for each node...
@@ -301,9 +300,8 @@ def stop_solr():
 
 def restart_solr_instances(n_instances=3, n_shards=3):
     stop_solr()
-    time.sleep(5)########
+    time.sleep(5)
     hosts = get_hosts()['solr_hosts']
-#     del hosts['f3']
     zk_host_str = _zk_host_str()
     print 'Restarting solr instances with zk servers: {}'.format(zk_host_str)
     instances = setup_solr_instances(hosts, n_instances, install_new=False)
@@ -361,8 +359,7 @@ def run_demo(num_shards=3, n_instances=3):
     solr_hosts = hosts['solr_hosts']
     setup_zk_ensemble(zk_hosts)
     start_zk_ensemble(zk_hosts)
-    # check_zk_running(zk_hosts)
-#     del solr_hosts['f3']
+    check_zk_running()
     solr_hosts = setup_solr_instances(solr_hosts, n_instances,
                                       install_new=True)
     run_solr_instances(solr_hosts, zk_hosts=zk_hosts, n_shards=num_shards)
