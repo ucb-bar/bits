@@ -5,6 +5,7 @@
 
 from collections import defaultdict
 from math import ceil
+from time import sleep
 import argparse
 import getpass
 import glob
@@ -60,6 +61,8 @@ class HeadRequest(urllib2.Request):
 
 def _gen_zoo_cfg(zkHosts):
     # zkhosts is a list with addresses to hosts
+    
+
     zoo_cfg = ''
     zoo_cfg += 'tickTime=2000\n'
     zoo_cfg += 'initLimit=10\n'
@@ -75,7 +78,8 @@ def _gen_zoo_cfg(zkHosts):
 
 def setup_zk_ensemble(hosts):
     # Remove previous instance of app
-
+    
+    
     print '>', local_zk_zip
     remote_zip = REMOTE_DIR + zk_app_zip
     print '>', zk_dir
@@ -123,10 +127,12 @@ def stop_zk_ensemble():
                      'zookeeper'], stderr=DNULL)
 
 def _check_zk_instance(host):
-
-    output = subprocess.check_output('echo srvr | nc f1 2181', \
+    try:
+        output = subprocess.check_output('echo srvr | nc f1 2181', \
                              shell=True)
-
+    except:
+        output = None
+        
     if output is not None and output.lower().startswith('zookeeper version'):
         return True
     else:
@@ -223,13 +229,13 @@ def setup_solr_instances(hosts, n_instances, install_new=True):
     rounds = int(ceil(n_instances / float(len(hosts))))
     added = 0
     instance_ports = defaultdict(list)
-    print '> Setting up instances...'
+    print '> Setting up Solr instances...'
     for r in range(rounds):
 
         for n, h in enumerate(hosts):
             if added + 1 > n_instances:
                 break
-            print '> Setting up solr instance {} on host {}:{}'.format(
+            print '> Setting up Solr instance {} on host {}:{}'.format(
                                                     added + 1, h, cur_dir_id)
             
             if install_new:
@@ -281,8 +287,8 @@ def _start_instances(instance_hosts, n_shards, zk_hosts_str=None):
             subprocess.call(' ' .join([srun_cmd, srun_cmd1, srun_cmd2]),
                         shell=True)
     
-    print '> Waiting for instances to start...'
-    time.sleep(3)
+    print '> Waiting for Solr instances to start...'
+    time.sleep(5)
     solr_instances_running(all_instances)
 
 def run_solr_instances(instance_hosts, zk_hosts, n_shards):
@@ -366,6 +372,7 @@ def run_demo(num_shards=3, n_instances=3, host_conf=None):
     solr_hosts = hosts['solr_hosts']
     setup_zk_ensemble(zk_hosts)
     start_zk_ensemble(zk_hosts)
+    sleep(3)
     check_zk_running()
     solr_hosts = setup_solr_instances(solr_hosts, n_instances,
                                       install_new=True)
@@ -420,7 +427,7 @@ def get_hosts():
         for h in roles['solr']:
             solr_hosts[h] = ips[h]
     else:
-        ips.items()
+        ips = ips.items()
         ips.sort()
         zk_hosts = dict(ips[:3])
         if nhosts == 3:
@@ -478,8 +485,8 @@ parser.add_argument('--instances', type=int, default=3, \
                     help='The number of solr instances to setup/run. default=3')
 parser.add_argument('--shards', type=int, default=3, \
                     help='The number of shards in the collection. default=3')
-parser.add_argument('--remoteDir', type=str, default=REMOTE_DIR, \
-                    help='Specify a non-standard installation path for Solr')
+# parser.add_argument('--remoteDir', type=str, default='/data/solar/', \
+#                     help='Specify a non-standard installation path for Solr')
 
 args = parser.parse_args()
 
@@ -493,15 +500,12 @@ print '> COMMAND = ' + str(args.action)
 
 num_shards = args.shards
 n_instances = args.instances
-REMOTE_DIR = args.remoteDir
+# REMOTE_DIR = args.remoteDir
 
 # ## ZK and Solr hosts
 all_hosts = get_hosts() 
 solr_hosts = all_hosts['solr_hosts']
 zk_hosts = all_hosts['zk_hosts']
-
-print zk_hosts
-print solr_hosts, 'solr'
 
 if args.action == 'setup-zk':
 
