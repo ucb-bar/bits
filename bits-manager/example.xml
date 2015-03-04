@@ -2,39 +2,23 @@
 
 <config>
     <workload>
-        <name>RAMCloud</name>
+        <name>RAMCloud-workload</name>
         <description>RAMCloud ClusterPerf</description>
         <path>../KV-stores/ramcloud/ramcloud.py</path>
         <cl-options>
-            <command>
-                <name>coordinator-node</name>
-                <value>f1</value>
-            </command>
-            <command>
-                <name>number-servers</name>
-                <value>4</value>
-            </command>
+            <coordinator-node>f1</coordinator-node>
+            <number-servers>4</number-servers>
+            <server-nodes>f1 f2 f3 f4</server-nodes>
         </cl-options>
     </workload>
 
 
     <workload>
-        <name>Nginx</name>
+        <name>Nginx-workload</name>
         <description>Nginx webserver - ab test</description>
-        <path>../nginx/nginx.py</path>
+        <path>nginx/nginx.py</path>
         <cl-options>
-            <command>
-                <name>nginx_node</name>
-                <value>f10</value>
-            </command>
-            <command>
-                <name>ab_node</name>
-                <value>f11</value>
-            </command>
-            <command>
-                <name>--ab_num_requests</name>
-                <value>1000000</value>
-            </command>
+            <nginx-node>f1</nginx-node>
         </cl-options>
     </workload>
 
@@ -54,13 +38,13 @@
             <item name="Nginx"/>
         </sequential>
     </benchmark>
+
     <benchmark>
         <name>Benchmark-concurrent</name>
-        <description>Benchmark that runs two workloads concurrently in the same box</description>
+        <description>Benchmark that runs every two workloads concurrently on the same node</description>
         <concurrent>
             <workload-instance name="RAMCloud"/>
             <workload-instance name="Nginx"/>
         </concurrent>
-        <results-directory>results</results-directory>
     </benchmark>
 </config>
