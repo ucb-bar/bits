@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+
+<config>
+    <workload>
+        <name>RAMCloud-workload</name>
+        <description>RAMCloud ClusterPerf</description>
+        <path>KV-stores/ramcloud/ramcloud.py</path>
+        <cl-options>
+            <coordinator-node>f1</coordinator-node>
+            <number-servers>4</number-servers>
+            <server-nodes>f1 f2 f3 f4</server-nodes>
+        </cl-options>
+    </workload>
+
+
+    <workload>
+        <name>Nginx-workload</name>
+        <description>Nginx webserver - ab test</description>
+        <path>nginx/nginx.py</path>
+        <cl-options>
+            <nginx-node>f1</nginx-node>
+        </cl-options>
+    </workload>
+
+    <benchmark>
+        <name>Benchmark-sequential</name>
+        <description>Benchmark that runs every workload sequentially</description>
+        <sequential>
+            <item name="RAMCloud"/>
+            <item name="Nginx"/>
+        </sequential>
+    </benchmark>
+
+    <benchmark>
+        <name>Benchmark-concurrent</name>
+        <description>Benchmark that runs every two workloads concurrently on the same node</description>
+        <concurrent>
+            <workload-instance name="RAMCloud"/>
+            <workload-instance name="Nginx"/>
+        </concurrent>
+    </benchmark>
+</config>
