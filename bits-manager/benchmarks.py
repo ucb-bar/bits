@@ -16,7 +16,6 @@ def build_cl_options(workload):
         first = option[0]
         second = option[1]
         result += [first, second]
-#result += [first, "\"" + second + "\""]
     return result
 
 def run_benchmarks(benchmarks, workloads):
