@@ -37,19 +37,19 @@ $ python solrcloud_firebox.py stop-zk
 ### Indexing the sample collection
 The "run-demo" command will ask if you want to use start indexing a set of sample documents located on /nscratch. This sample set contains 50 million synthetically generated documents that take up 200 GB of storage on disk. It usually takes a few hours to index this sample set completely. If you would like to index a set of documents with a different schema, you will need to modify the solrcloud_firebox.py code to point to a different schema.xml file. 
 
-### Manually specify layout of nodes
+### Manually specifying layout of nodes
 You can specify the layout of nodes by including solrcloud-hosts.conf file in the  directory where solrcloud_firebox.py script is located. The solrcloud-hosts.conf is a tab-delimited file listing a mapping of Firebox nodes to instance types ("solr" or "zk"). The example below puts Solr on the f1, f2, and f3 nodes and collocates Solr and Zookeeper on nodes f4, f5, and f6:
 
 ```
-f1[TAB]solr
-f2[TAB]solr
-f3[TAB]solr
-f4[TAB]solr
-f5[TAB]solr
-f6[TAB]solr
-f1[TAB]zk
-f2[TAB]zk
-f3[TAB]zk
+f1  solr
+f2  solr
+f3  solr
+f4  solr
+f5  solr
+f6  solr
+f4  zk
+f5  zk
+f6  zk
 ```
 
 If you have more than 3 nodes and don't include a solrcloud-hosts.conf file, solrcloud_firebox.py will place Zookeeper ONLY on the first 3 nodes and no Solr instances. If you want ZK and Solr to share nodes, use the solrcloud_hosts.conf file (or only allocate 3 nodes).
