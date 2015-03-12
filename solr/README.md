@@ -34,6 +34,12 @@ $ python solrcloud_firebox.py stop-solr
 $ python solrcloud_firebox.py stop-zk
 ```
 
+Alternatively, if you are done testing and want to stop all services and remove all Solr data from disk, you can terminate the session completely:
+
+```
+$ python solrcloud_firebox.py terminate-session
+```
+
 ### Indexing the sample collection
 The "run-demo" command will ask if you want to use start indexing a set of sample documents located on /nscratch. This sample set contains 50 million synthetically generated documents that take up 200 GB of storage on disk. It usually takes a few hours to index this sample set completely. If you would like to index a set of documents with a different schema, you will need to modify the solrcloud_firebox.py code to point to a different schema.xml file. 
 

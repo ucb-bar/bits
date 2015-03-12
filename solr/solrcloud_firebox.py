@@ -105,7 +105,8 @@ def setup_zk_ensemble(hosts):
         srun_cmd = ['srun', '--nodelist=' + h, '-N1']
         srun_cmd2 = ['bash', 'myid.sh', zk_data_dir + '/myid', str(n + 1)]
         subprocess.call(srun_cmd + srun_cmd2)
-
+        subprocess.call(srun_cmd + ['rm', '-f', remote_zip])
+        
 def start_zk_ensemble(zk_hosts):
     for h in zk_hosts:
         print '> Starting Zookeeper host on {}'.format(h)
@@ -117,8 +118,10 @@ def start_zk_ensemble(zk_hosts):
         subprocess.call(' '.join(srun_cmd + srun_cmd2), shell=True)
     sleep(3)
     check_instances_running(zk_hosts, 'zk')
-            
+
+
 def stop_zk_ensemble():
+    print '> Stopping Zookeeper ensemble'
 
     # Kill all zookeeper processes started by current user
     subprocess.call(['srun', 'pkill', '-f', '-U', getpass.getuser(),
@@ -133,7 +136,6 @@ def _check_zk_instance(host):
     else:
         return False
 
-    
 def _zk_host_str():
     zk_hosts = get_hosts()['zk_hosts']
     return ','.join([h + ':2181' for h in zk_hosts])
@@ -192,6 +194,7 @@ def _install_new_solr_instance(host, cur_id, remote_zip):
     srun_cmd5 = ['cp', WORK_DIR + SOLR_CONF, os.path.join(
        cur_solr_dir, os.path.join(SOLR_CONF_DIR, SOLR_CONF))]
     
+
     # Remove previous solr dir
     subprocess.call(srun_cmd + srun_cmd1)
     
@@ -202,6 +205,8 @@ def _install_new_solr_instance(host, cur_id, remote_zip):
     # Copy config file to new instance
     subprocess.call(srun_cmd + srun_cmd4)
     subprocess.call(srun_cmd + srun_cmd5)
+
+
 
 def setup_solr_instances(hosts, n_instances, install_new=True):
     '''Setup solr instances. Copy a version of solr to nodes in a round
@@ -259,7 +264,6 @@ def _start_instances(instance_hosts, n_shards, zk_hosts_str=None):
             srun_cmd1 = '--chdir=' + solr_dir
             
             srun_cmd2 = ' '.join(['nohup', 'java', 
-            '-Xmx25g',
             '-XX:+UseConcMarkSweepGC',
             '-DnumShards=' + str(n_shards),
             '-Dbootstrap_confdir=./solr/collection1/conf',
@@ -305,12 +309,26 @@ def stop_solr():
                             stderr=DNULL)
 
 def restart_solr_instances(n_instances=3, n_shards=3):
+    '''Restart Solr instances from a previous session. It is important that
+    the n_instances and n_shards parameters are set to the exact same values
+    as they were when Solr was last run. Zookeeper must be running'''
+    
     stop_solr()
     time.sleep(5)
-    hosts = get_hosts()['solr_hosts']
+
+    all_hosts = get_hosts()
+    solr_hosts = all_hosts['solr_hosts']
+    zk_hosts = all_hosts['zk_hosts']
+    
+    if not check_instances_running(zk_hosts, 'zk'):
+        print '[ERROR] Zookeeper must be running in order to restart Solr'
+        print '[ERROR] Exiting...'
+        return
+    
     zk_host_str = _zk_host_str()
     print '> Restarting solr instances with zk servers: {}'.format(zk_host_str)
-    instances = setup_solr_instances(hosts, n_instances, install_new=False)
+    instances = setup_solr_instances(solr_hosts, n_instances, \
+                                     install_new=False)
     _start_instances(instances, n_shards, zk_host_str)
 
 def add_solr_instances(n_instances, n_shards):
@@ -335,6 +353,7 @@ def add_solr_instances(n_instances, n_shards):
     
     # Start just the new instances
     _start_instances(instances_to_create, 3)
+
 
 
 ######## Add / Query documents ########
@@ -427,13 +446,6 @@ def get_hosts():
     if nhosts < 3:
         raise ValueError, 'Insufficient number of nodes. Minimum 3 required'
     
-#     MILL = '.millennium.berkeley.edu'
-#     new_ips = {}
-#     for h in ips:
-#         new_ips[h+MILL] = ips[h]
-#     
-#     ips = new_ips
-    
     if os.path.exists(HOST_CONF):
         roles = _read_host_conf(HOST_CONF)
         zk_hosts = {}
@@ -454,6 +466,75 @@ def get_hosts():
     
     return {'solr_hosts': solr_hosts, 'zk_hosts': zk_hosts}
 
+
+def get_live_nodes():
+    '''Returns a list ({host}:{port}) of all the running Solr nodes'''
+    
+    solr_hosts = get_hosts()['solr_hosts'].keys()
+    solr_hosts.sort()
+    host = solr_hosts[0]  # Pick first solr node off list
+    url = 'http://{host}:8983'.format(host=host)
+    url += '/solr/zookeeper?path=/live_nodes'
+    
+    err_msg = '[ERROR] Solr and Zookeeper must be running in order to \
+perform this operation'
+    
+    nodes = []
+    try:
+        res = urllib2.urlopen(url)
+    except:
+        print err_msg
+        return
+    
+    if res.getcode() == 200:
+        jsn = json.loads(res.read())
+        children = [n['data']['title'] for n in jsn['tree'][0]['children']]
+        nodes = [c.replace('_solr', '') for c in children]
+        nodes.sort()
+        internal_hosts = [n.split(':')[0] for n in nodes]
+        host_map = {}
+        
+        # Map solr fbox node names to internal (high-bandwidth) ip addresses
+        i = 0
+        slr_inx = 0
+        while (len(host_map) < len(solr_hosts)) and i < len(nodes):
+            h = internal_hosts[i]
+            if h not in host_map:
+                host_map[h] = solr_hosts[slr_inx]
+                slr_inx += 1
+            i+=1
+        
+        # Rename hosts by replacing internal IP addresses with f1,f2, etc names
+        for i, h in enumerate(internal_hosts):
+            nodes[i] = nodes[i].replace(h, host_map[h])
+    else:
+        print error_msg
+        return
+    return nodes
+
+
+def terminate_session():
+    '''Stop all services and remove all Solr data'''
+    
+    nodes = get_live_nodes()
+    stop_solr()
+    stop_zk_ensemble()
+    print '> Removing Solr data from nodes'
+    for n in nodes:
+        host, port = n.split(':')
+         
+        subprocess.call(['srun', '-N1', '--nodelist='+host, 'rm', '-rf', \
+                         os.path.join(REMOTE_DIR, port)])
+    
+    # Finally, remove any remaining Solr archive files
+    solr_archive = os.path.join(REMOTE_DIR, solr_app_tgz)
+    for h in get_hosts()['solr_hosts']:
+        subprocess.call(['srun', '-N1', '--nodelist='+h, 'rm', '-rf', \
+                         solr_archive, zk_dir])
+        
+    
+    print '> Finished'
+    
 #######################################
 # Return the list of nodes in the current SLURM allocation
 # below is from Martin Maas' cassandra.py code on github ucb-bits
@@ -493,9 +574,11 @@ parser.add_argument('action',
     start-solr
     stop-solr
     restart-solr
+    get-live-nodes
     run-demo
     index-samples
     test-query
+    terminate-session
     ''')
 
 parser.add_argument('--instances', type=int, default=3, \
@@ -549,6 +632,10 @@ elif args.action == 'index-samples':
     index_sample_documents()
 elif args.action == 'test-query':
     test_query()
+elif args.action == 'get-live-nodes':
+    print 'Live Solr instances:', get_live_nodes()
+elif args.action == 'terminate-session':
+    terminate_session()
 else:
     print '[ERROR] Unknown action \'' + args.action[0] + '\''
 
