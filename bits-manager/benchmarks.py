@@ -36,10 +36,10 @@ def run_benchmarks(benchmarks, workloads):
         # setup all workloads
         for workload in benchmark['workloads']:
 
-            print "Setting up workload"
             path = workloads[workload]['path']
             run_cmd = ["/usr/bin/python", path, "setup"]
 
+            print "Setting up workload: " + ' '.join(run_cmd)
             subprocess.call(run_cmd, stdout = fout, stderr = ferr)
 
         # run workloads

@@ -70,6 +70,5 @@ elif args.plan:
             print "Workload name: " + workload
 
 else:
-    print '[ERROR] Unknown action \'' + args.action[0] + '\''
-
+        print '[ERROR] Unknown action'
 
