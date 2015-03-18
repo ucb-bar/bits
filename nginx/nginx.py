@@ -23,6 +23,10 @@ import datetime
 import time
 import atexit
 import json
+import sys
+
+sys.path.append(os.path.abspath(os.path.join('..')))
+from bits_utilities import string_in_log
 
 run_timestamp = time.time()
 
@@ -66,6 +70,7 @@ def check_slurm_allocation():
         if (not 'SLURM_NODELIST' in os.environ) or (not os.environ['SLURM_NODELIST']):
             print '[ERROR] Need to run script within SLURM allocation'
             exit(1)
+
 # -------------------------------------------------------------------------------------------------
 
 def do_setup():
@@ -119,13 +124,20 @@ def do_setup():
 
 # -------------------------------------------------------------------------------------------------
 
-def shutdown_nginx():
-        p = subprocess.Popen(['./objs/nginx','-s','stop'], cwd=nginx_dir)
+##def shutdown_nginx():
+##        p = subprocess.Popen(['./objs/nginx','-s','stop'], cwd=nginx_dir)
+##        p.wait()
+##
+##	print '> DONE'	
+def shutdown_nginx(nginx_node):
+        srun_cmd = ['srun', '--nodelist=' + nginx_node, '-N1']
+        srun_cmd += ['./objs/nginx','-s','stop']
+        p = subprocess.Popen(srun_cmd, cwd=nginx_dir)
         p.wait()
 
 	print '> DONE'	
 
-def do_start():
+def start_nginx(nginx_node):
 	print '> Launching nginx...'
 	print '>'
 	print '> Output redirected to ' + rundir_nginx
@@ -134,8 +146,6 @@ def do_start():
         make_dir(rundir_nginx)
 	# Create symlink for latest run
 	subprocess.call(['ln', '-s', '-f', '-T', rundir_nginx, workdir + '/latest-nginx'])
-
-        nginx_node = get_slurm_nodelist()[0] # we use the first node for nginx
 
         print "Starting nginx in node " + nginx_node
         
@@ -153,7 +163,8 @@ def do_start():
 	print '>'
 	print '> TEST IS RUNNING! CHECK OUTPUT IN THE WORK FOLDER'
 
-def run_ab_test():
+def run_ab_test(nginx_node, ab_node, ab_max_time,
+        ab_concurrent_connections, ab_num_requests):
 	print '> Launching the ab test against nginx...'
 	print '>'
 	print '> Output redirected to ' + rundir_ab
@@ -164,8 +175,6 @@ def run_ab_test():
 	subprocess.call(['ln', '-s', '-f', '-T', rundir_ab, workdir + '/latest-ab'])
 
         # use second node for ab
-        nginx_node = get_slurm_nodelist()[0] 
-        ab_node = get_slurm_nodelist()[1] 
 
         myoutfile = rundir_ab + '/stdout'
         myerrfile = rundir_ab + '/stderr'
@@ -173,7 +182,10 @@ def run_ab_test():
         ferr = open(myerrfile, 'w') 
         
         srun_cmd = ['srun', '--nodelist=' + ab_node, '-N1'] 
-        srun_cmd = ['ab', '-kc', '1000', '-n', '10000']
+        srun_cmd = ['ab', '-kc', str(ab_concurrent_connections)]
+        srun_cmd +=['-n', str(ab_num_requests)]
+        if ab_max_time != -1:
+           srun_cmd += ['-t', str(ab_max_time)]
         srun_cmd += [nginx_node + ':' + str(ab_port) + '/index.html']
 
         print "Starting ab in node " + ab_node
@@ -192,7 +204,12 @@ def run_ab_test():
 # -------------------------------------------------------------------------------------------------
 
 parser = argparse.ArgumentParser(description='Run nginx on FireBox-0 cluster.')
-parser.add_argument('action', nargs=1, help='the action to perform (setup|start|stop)')
+parser.add_argument('action', nargs=1, help='the action to perform (setup|start|start-nginx|stop|run-ab-test)')
+parser.add_argument('nginx_node', nargs=2, help='the node where nginx runs (make sure it is Slurm allocated\'')
+parser.add_argument('ab_node', nargs=2, help='the node where ab runs (make sure it is Slurm allocated\'')
+parser.add_argument('--ab_max_time', nargs="?", const=-1, default=-1, help='the time to run the ab stress test\'')
+parser.add_argument('--ab_concurrent_connections', nargs='?', const=10, default=10, help='ab concurrent connections\'')
+parser.add_argument('--ab_num_requests', nargs="?", const=100000, default=100000, help='ab number of http requests\'')
 
 args = parser.parse_args()
 
@@ -209,15 +226,39 @@ print '>'
 
 print '> COMMAND = ' + str(args.action)
 
+check_slurm_allocation()
+assert args.nginx_node and args.nginx_node[1] in get_slurm_nodelist()
+assert args.ab_node and args.ab_node[1] in get_slurm_nodelist()
+
 if args.action[0] == 'setup':
 	do_setup()
 elif args.action[0] == 'start':
-        check_slurm_allocation()
-	do_start()
+
+	start_nginx(args.nginx_node[1])
+        time.sleep(1) # make sure nginx has time to start XXX fix this
+
+        if string_in_log(rundir_nginx + '/stderr', "error") or \
+           string_in_log(rundir_nginx + '/stderr', "failed"):
+           print "Error launching nginx"
+           exit(-1);
+
+	run_ab_test(args.nginx_node[1],args.ab_node[1], 
+                args.ab_max_time,
+                args.ab_concurrent_connections,
+                args.ab_num_requests)
+
+elif args.action[0] == 'start-nginx':
+
+	start_nginx(args.nginx_node[1])
+elif args.action[0] == 'run-ab-test':
+
+	run_ab_test(args.nginx_node[1],args.ab_node[1], 
+                args.ab_max_time[0],
+                args.ab_concurrent_connections,
+                args.ab_num_requests[0])
 elif args.action[0] == 'stop':
-	shutdown_nginx()
-elif args.action[0] == 'run-test':
-        check_slurm_allocation()
-	run_ab_test()
+	shutdown_nginx(args.nginx_node[1])
 else:
-	print '[ERROR] Unknown action \'' + args.action[0] + '\''
+	print '[ERROR] Unknown action'
+
+
