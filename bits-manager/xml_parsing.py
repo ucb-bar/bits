@@ -35,11 +35,15 @@ def parse_xml(file_path):
 
             xml_cl_options = workload.getElementsByTagName("cl-options")[0]
             for child in xml_cl_options.childNodes:
-                if child.nodeName == "#text": # ??
+                if child.nodeName == "#text":
                     continue
-                data = child.childNodes[0].data
+                else:
+                    assert child.nodeName == "command"
 
-                cl_options += [child.nodeName, data]
+                cmd_name = getTagData(child, "name")
+                cmd_value = getTagData(child, "value")
+
+                cl_options.append([cmd_name, cmd_value])
 
             workload_dict['cl-options'] = cl_options
             workloads_db[workload_dict['name']] = workload_dict
