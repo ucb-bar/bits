@@ -1,5 +1,7 @@
 ## Getting started
 
+Make sure you are running Java 1.7 (e.g. export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64/jre)
+
 Allocate nodes with slurm. A minimum of 3 are required
 
 ```
