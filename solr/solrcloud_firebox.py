@@ -27,6 +27,7 @@ REMOTE_DIR = '/data/solar/'
 SOLR_CONF_DIR = 'example/solr/collection1/conf/'
 SOLR_CONF = 'solrconfig.xml'
 SCHEMA_CONF = 'schema.xml'
+DATA_CONFIG = 'data-config.xml'
 HOST_CONF = 'solrcloud-hosts.conf'
 # REMOTE_DIR = '/pcie_data/solr/'
 zk_version = '3.4.6'
@@ -194,6 +195,9 @@ def _install_new_solr_instance(host, cur_id, remote_zip):
     srun_cmd5 = ['cp', WORK_DIR + SOLR_CONF, os.path.join(
        cur_solr_dir, os.path.join(SOLR_CONF_DIR, SOLR_CONF))]
     
+    srun_cmd6 = ['cp', WORK_DIR + DATA_CONFIG, os.path.join(
+       cur_solr_dir, os.path.join(SOLR_CONF_DIR, DATA_CONFIG))]
+    
 
     # Remove previous solr dir
     subprocess.call(srun_cmd + srun_cmd1)
@@ -205,6 +209,7 @@ def _install_new_solr_instance(host, cur_id, remote_zip):
     # Copy config file to new instance
     subprocess.call(srun_cmd + srun_cmd4)
     subprocess.call(srun_cmd + srun_cmd5)
+    subprocess.call(srun_cmd + srun_cmd6)
 
 
 
@@ -264,7 +269,9 @@ def _start_instances(instance_hosts, n_shards, zk_hosts_str=None):
             srun_cmd1 = '--chdir=' + solr_dir
             
             srun_cmd2 = ' '.join(['nohup', 'java', 
-            '-XX:+UseConcMarkSweepGC',
+#             '-XX:+UseConcMarkSweepGC',
+            '-XX:+PrintGCApplicationStoppedTime',
+            '-Xmx4g',
             '-DnumShards=' + str(n_shards),
             '-Dbootstrap_confdir=./solr/collection1/conf',
             '-Dcollection.configName=myconf',
@@ -285,7 +292,11 @@ def _start_instances(instance_hosts, n_shards, zk_hosts_str=None):
     
     print '> Waiting for Solr instances to start...'
     time.sleep(2)
-    check_instances_running(all_instances, 'solr')
+    if not check_instances_running(all_instances, 'solr'):
+        print '[ERROR] Failed to start all instances in the allotted time'
+        print '[ERROR] Check /{}/example/logs for more information'.format(\
+                                                                solr_version)
+        sys.exit(0)
 
 def run_solr_instances(instance_hosts, zk_hosts, n_shards):
     zk_hosts_str = _zk_host_str()
