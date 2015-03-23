@@ -292,9 +292,10 @@ def _start_instances(instance_hosts, n_shards, zk_hosts_str=None):
     
     print '> Waiting for Solr instances to start...'
     time.sleep(2)
+    
     if not check_instances_running(all_instances, 'solr'):
         print '[ERROR] Failed to start all instances in the allotted time'
-        print '[ERROR] Check /{}/example/logs for more information'.format(\
+        print '[ERROR] Check /{}/example/logs for more information'.format(
                                                                 solr_version)
         sys.exit(0)
 
