@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-# Usage of memcached.py script:
+# Usage of ycsb.py script:
 # Need to run within a salloc allocation.
 # 
-# setup: Download and install memcached into a shared directory.
-# start: Start a memcached cluster.
-# stop: Stop the memcached cluster.
+# setup: Download and install ycsb into a shared directory.
+# start: Start a ycsb cluster.
+# stop: Stop the ycsb cluster.
 
 # Contributors:
 # Joao Carreira <joao@eecs.berkeley.edu> (2015)
@@ -27,20 +27,15 @@ run_timestamp = time.time()
 # -------------------------------------------------------------------------------------------------
 
 version='1.0'
-memcached_version = '1.4.22'
 
 user_dir = '/nscratch/' + getpass.getuser()
 outdir = user_dir + '/memcached_bits'
-memcached_file = 'memcached-' + memcached_version
-memcached_dir = outdir + '/' + memcached_file
+ycsb_dir = outdir + '/ycsb-memcached'
 workdir = os.getcwd() + '/work'
-rundir = workdir + '/memcached-' +  datetime.datetime.fromtimestamp(run_timestamp). \
+rundir = workdir + '/ycsb-' +  datetime.datetime.fromtimestamp(run_timestamp). \
 	strftime('%Y-%m-%d-%H-%M-%S')
 
-network_if = 'eth0'
-
-memcached_tar_file = memcached_file + '.tar.gz'
-memcached_url = 'http://www.memcached.org/files/' + memcached_tar_file
+ycsb_url = 'git@github.com:jcarreira/ycsb-memcached.git'
 
 # -------------------------------------------------------------------------------------------------
 
@@ -62,44 +57,35 @@ def get_slurm_nodelist():
 # -------------------------------------------------------------------------------------------------
 
 def do_setup():
-	print '> Setting up Memcached in directory ' + outdir
+	print '> Setting up YCSB in directory ' + outdir
 	print '>'
 
-	if not os.path.exists(outdir):
+	if os.path.exists(outdir): # make sure it was setup already
                 make_dir(outdir)        
                 print '> Entering directory: ' + outdir
-                print '> Downloading Memcached..'
-                p = subprocess.Popen(['wget', memcached_url], cwd = outdir)
+                print '> Downloading YCSB..'
+                p = subprocess.Popen(['git', 'clone', ycsb_url], cwd = outdir)
                 p.wait()
 
-                print '> Untaring memcached..'
+                print '> Compiling ycsb..'
 
-                p = subprocess.Popen(['tar', '-xof', memcached_tar_file], cwd = outdir)
-                p.wait()
-                
-                print '> ./configure\'ing memcached..'
-                p = subprocess.Popen(['./configure'], cwd = memcached_dir)
-                p.wait()
-                
-                print '> Compiling memcached..'
-                p = subprocess.Popen(['make', '-j', '10'], cwd = memcached_dir)
+                p = subprocess.Popen(['make', '-j', '16'], cwd = ycsb_dir)
                 p.wait()
                         
                 if p.returncode != 0:
-                    print "Error compiling Memcached."
+                    print "Error compiling YCSB."
                     exit(-1);
 
                 print '> DONE'
 	else:
-                print '> Memcached was already setup. To perform setup' + \
-                        'again please remove folder'
+                print '> Make sure memcached was already setup.'
 	print '>'
 	print '> DONE'
 	print '>'
 
 # -------------------------------------------------------------------------------------------------
 
-memcached_instances = {}
+ycsb_instances = {}
 
 def check_slurm_allocation():
         if (not 'SLURM_NODELIST' in os.environ) or (not os.environ['SLURM_NODELIST']):
@@ -107,9 +93,9 @@ def check_slurm_allocation():
             exit(1)
 
 
-def shutdown_memcached_instances():
-	print '> Shutting down memcached instances'
-	for c in memcached_instances.values():
+def shutdown_ycsb_instances():
+	print '> Shutting down ycsb instances'
+	for c in ycsb_instances.values():
                 print "Terminating node " + c['node_id']
 		c['process'].terminate()
 
@@ -117,27 +103,24 @@ def shutdown_memcached_instances():
 	all_done = True
 	while not all_done:
 		all_done = True
-		for c in memcached_instances.values():
+		for c in ycsb_instances.values():
 			if (c['process'].poll() == None):
 				all_done = False
 		time.sleep(0.01)
 	print '> DONE'	
 
-def wait_for_memcached_server(node):
-	print '>'
-	print '> Waiting for memcached server to finish starting up...'
+def get_ycsb_cmd(memcached_node):
+    srun_cmd = ['sh', 'bin/ycsb.sh'];
+    srun_cmd += ['com.yahoo.ycsb.Client', '-db', 'com.yahoo.ycsb.db.Memcached']
+    srun_cmd += ['-p', 'workload=com.yahoo.ycsb.workloads.CoreWorkload', '-p', 'updateretrycount=1000']
+    srun_cmd += ['-p', 'recordcount=500000000', '-p', 'exportmeasurementsinterval=30000']
+    srun_cmd += ['-p', 'fieldcount=10', '-p', 'timeseries.granularity=100']
+    srun_cmd += ['-p', 'measurementtype=timeseries']
+    srun_cmd += ['-P', 'workloads/workloadd', '-p', 'memcached.server=' + memcached_node]
+    return srun_cmd
 
-	while True:
-		with open(memcached_instances[node]['err'], 'r') as fout:
-		    outdata = fout.read()	
-		if re.search("server listening", outdata) != None:
-                    break
-		time.sleep(0.01)
-
-	print '> ALL SERVERS ARE UP!'
-
-def do_start():
-	print '> Launching Memcached cluster...'
+def do_start(memcached_node):
+	print '> Launching YCSB...'
 	print '>'
 	print '> Output redirected to ' + rundir
 	print '>'
@@ -153,50 +136,52 @@ def do_start():
 	print '> Nodes: ' + ', '.join(nodes)
 	print '>'
 	
-	atexit.register(shutdown_memcached_instances)
+	atexit.register(shutdown_ycsb_instances)
 
-	print '> Launching Memcached servers'
+	print '> Launching YCSB client'
 	print '>'
 
-        print '> Launching Memcached server on ' + node
+        print '> Launching YCSB client on ' + node
 
-        srun_cmd = ['srun', '--nodelist=' + node, '-N1']
-        srun_cmd += ['./memcached','-m', '64']
+        srun_cmd =  get_ycsb_cmd(memcached_node)
 
-        myrundir = rundir + '/server-' + node
+        myrundir = rundir + '/ycsb-server-' + node
         make_dir(myrundir)
         myoutfile = myrundir + '/stdout'
         myerrfile = myrundir + '/stderr'
 
         fout = open(myoutfile, 'w')
         ferr = open(myerrfile, 'w')
-        p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, cwd=memcached_dir)
-        memcached_instances[node] = {'process': p, 'out': myoutfile, \
+        p = subprocess.Popen(srun_cmd, stdout=fout, stderr=ferr, cwd=ycsb_dir)
+
+        ycsb_instances[node] = {'process': p, 'out': myoutfile, \
             'err': myerrfile, 'type': 'worker', 'node_id' : node}
 
-
-#wait_for_memcached_server(node)
-
 	print '>'
-	print '> ALL NODES ARE UP! TERMINATE THIS PROCESS TO SHUT DOWN MEMCACHED CLUSTER.'
-	while True:
-		time.sleep(0.5)
+	print '> YCSB RUNNING..'
+        
+        p.wait()
+
+        ycsb_instances.clear()
 
 # -------------------------------------------------------------------------------------------------
 
-parser = argparse.ArgumentParser(description='Run script for Memcached on FireBox-0 cluster.')
+parser = argparse.ArgumentParser(description='Run YCSB on Memcached on FireBox-0 cluster.')
 parser.add_argument('action', nargs=1, help='the action to perform (setup|start|stop)')
+parser.add_argument('memcached_node', nargs=2, help='the node where memcached runs')
 
 args = parser.parse_args()
 
 print '> ================================================================================'
-print '> MEMCACHED RUN SCRIPT FOR FIREBOX-0 CLUSTER (VERSION ' + str(version) + ')'
+print '> YCSB RUN SCRIPT FOR FIREBOX-0 CLUSTER (VERSION ' + str(version) + ')'
 print '> ================================================================================'
 print '>'
 
 git_rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
 print '> GIT revision: ' + git_rev.replace('\n','')
-print '>'
+
+if not args.memcached_node:
+    print "memcached_node argument missing."
 
 print '>'
 
@@ -206,9 +191,9 @@ if args.action[0] == 'setup':
 	do_setup()
 elif args.action[0] == 'start':
         check_slurm_allocation()
-	do_start()
+	do_start(args.memcached_node[1])
 elif args.action[0] == 'stop':
-	shutdown_memcached_instances()
+	shutdown_ycsb_instances()
 else:
 	print '[ERROR] Unknown action \'' + args.action[0] + '\''
 
