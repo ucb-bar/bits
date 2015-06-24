@@ -88,6 +88,7 @@ def _gen_zoo_cfg(zkHosts):
     numHosts = len(zkHosts)
     if numHosts > 1:
         for z, k in enumerate(zkHosts): 
+#             zoo_cfg += 'server.%d=%s:2888:3888\n' % (z + 1, k)
             zoo_cfg += 'server.%d=%s:2888:3888\n' % (z + 1, k)
 #             zoo_cfg += 'server.%d=%s:2888:3888\n' % (z + 1, zkHosts[k])
 
@@ -511,6 +512,11 @@ def run_demo(num_shards=3, n_instances=3):
     and populate it with data.
     '''
     
+def run_demo(num_shards=3, n_instances=3):
+    '''Run a demonstration of all the steps needed to setup a SolrCloud cluster
+    and populate it with data.
+    '''
+    
     hosts = get_hosts()
     zk_hosts = hosts['zk_hosts']
     solr_hosts = hosts['solr_hosts']
@@ -619,6 +625,7 @@ def get_hosts():
         if nhosts == 3:
             solr_hosts = zk_hosts
         else:
+            
             solr_hosts = dict(ips[3:])
     
     return {'solr_hosts': solr_hosts, 'zk_hosts': zk_hosts}
