@@ -39,8 +39,6 @@ def build_oldisim():
     print '> Build finished'
 
 def setup():
-
-    
     for node in chain(root_nodes, leaf_nodes, [driver_node]):
         subprocess.call(['ssh', node, 'mkdir', '-p', RUN_DIR])
         
@@ -62,14 +60,10 @@ def setup():
                      dest.format(node=driver_node)])
     
 def start():
-    procs = {}
-    
-
     print '> Starting leaf nodes'
     for node in leaf_nodes:
-        p = subprocess.Popen(['ssh', node, \
+        subprocess.Popen(['ssh', node, \
                            os.path.join(RUN_DIR, 'LeafNode')])
-        procs[node] = p.pid
     
     sleep(3)
     
@@ -78,9 +72,7 @@ def start():
         cmd = ['ssh', node, os.path.join(RUN_DIR, 'ParentNode')]
         for leaf in leaf_nodes:
             cmd.append('--leaf=' + leaf)
-#         procs.append()
-        p = subprocess.Popen(cmd)
-        procs[node] = p.pid
+        subprocess.Popen(cmd)
 
     sleep(3)
 
@@ -88,14 +80,17 @@ def start():
     driver_cmd = ['ssh', driver_node, os.path.join(RUN_DIR, 'DriverNode')]
     for root in root_nodes:
         driver_cmd.append('--server=' + root)
+        
     print '> Running benchmark for %d seconds' % RUN_TIME
-    driver_proc = subprocess.Popen(driver_cmd)
+    subprocess.Popen(driver_cmd)
     
     sleep(RUN_TIME)
     print '> Finishing benchmark'
+    stop()
+
+def stop():
     subprocess.call(['ssh', driver_node, 'pkill', '-u', USER, '-INT', '-f', \
                      'DriverNode'])
-    driver_proc.send_signal(SIGINT)
     sleep(2)
     print 'Terminating all nodes'
     for node in leaf_nodes:
@@ -103,8 +98,7 @@ def start():
                          '-f', 'LeafNode'])
     for node in root_nodes:
         subprocess.call(['ssh', node, 'pkill', '-u', USER, '-SIGTERM', \
-                         '-f', 'ParentNode'])
-#         proc.wait()
+                         '-f', 'ParentNode'])    
 
 parser = argparse.ArgumentParser()
 
@@ -123,3 +117,5 @@ elif args.action == 'setup':
 elif args.action == 'start':
     RUN_TIME = args.time
     start()
+elif args.action == 'stop':
+    stop()
