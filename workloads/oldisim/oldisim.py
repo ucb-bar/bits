@@ -59,7 +59,7 @@ def setup():
     subprocess.call(['scp', RELEASE_DIR+'DriverNode', \
                      dest.format(node=driver_node)])
     
-def start():
+def start(clean_up = False):
     print '> Starting leaf nodes'
     for node in leaf_nodes:
         subprocess.Popen(['ssh', node, \
@@ -86,9 +86,9 @@ def start():
     
     sleep(RUN_TIME)
     print '> Finishing benchmark'
-    stop()
+    stop(clean_up=clean_up)
 
-def stop():
+def stop(clean_up=False):
     subprocess.call(['ssh', driver_node, 'pkill', '-u', USER, '-INT', '-f', \
                      'DriverNode'])
     sleep(2)
@@ -100,6 +100,21 @@ def stop():
         subprocess.call(['ssh', node, 'pkill', '-u', USER, '-SIGTERM', \
                          '-f', 'ParentNode'])    
 
+    if clean_up == True:
+        print '> --cleanup=True'
+        print '> Cleaning up nodes'
+        all_nodes = root_nodes[:]
+        all_nodes.extend(leaf_nodes)
+        all_nodes.append(driver_node)
+        
+        for node in all_nodes:
+            print '> Removing node at ', node
+            subprocess.call(['ssh', node, 'rm', '-rf', RUN_DIR])
+
+#-----------------------------------------------------------------------------
+## Argument list
+
+
 parser = argparse.ArgumentParser()
 
 parser.add_argument('action')
@@ -107,7 +122,18 @@ parser.add_argument('action')
 parser.add_argument('--time', type=int, default=10, \
                     help='Amount of time to run the benchmark')
 
+parser.add_argument('--rundir', type=str, default=RUN_DIR, \
+                    help='Install location for nodes')
+
+parser.add_argument('--cleanup', type=bool, default=False, \
+                    help='Optionally remove nodes when run is complete')
+
+
 args = parser.parse_args()
+
+RUN_DIR = args.rundir
+clean_up = args.cleanup
+
 if args.action == 'build':
     print '> Starting build process...'
     build_oldisim()
@@ -116,6 +142,6 @@ elif args.action == 'setup':
     setup()
 elif args.action == 'start':
     RUN_TIME = args.time
-    start()
+    start(clean_up=clean_up)
 elif args.action == 'stop':
-    stop()
+    stop(clean_up=clean_up)
